@@ -5,3 +5,7 @@
 __pycache__/
 
 PLANS/
+
+src/instance/
+
+uv.lock
