@@ -110,6 +110,44 @@ class CardRepository:
                 ),
             )
 
+    def update_card_content(
+        self,
+        *,
+        card_id: int,
+        deck_id: int,
+        identity_key: str,
+        lemma: str,
+        translation: str,
+        notes: str,
+        metadata: dict[str, Any],
+        connection: sqlite3.Connection | None = None,
+    ) -> None:
+        with self._use_connection(connection) as active_connection:
+            active_connection.execute(
+                """
+                UPDATE cards
+                SET
+                    deck_id = ?,
+                    identity_key = ?,
+                    lemma = ?,
+                    translation = ?,
+                    notes = ?,
+                    metadata_json = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    deck_id,
+                    identity_key,
+                    lemma,
+                    translation,
+                    notes,
+                    dump_json(metadata),
+                    serialize_datetime(utc_now()),
+                    card_id,
+                ),
+            )
+
     def update_schedule_state(
         self,
         *,

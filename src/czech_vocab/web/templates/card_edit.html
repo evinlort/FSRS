@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Редактирование карточки{% endblock %}
+{% block page_eyebrow %}Карточка{% endblock %}
+{% block page_title %}Редактирование карточки{% endblock %}
+{% block page_intro %}
+  <p>Обновите слово, перевод, заметки, колоду и дополнительные поля карточки.</p>
+{% endblock %}
+
+{% block content %}
+  <section class="panel edit-card-panel">
+    {% if error %}
+      <p class="form-error">{{ error }}</p>
+    {% endif %}
+    <form method="post" action="{{ url_for('main.update_card_page', card_id=card_form.card_id) }}">
+      <label class="field-label" for="deck_id">Колода</label>
+      <select id="deck_id" name="deck_id">
+        {% for deck in decks %}
+          <option value="{{ deck.id }}"{% if card_form.deck_id == deck.id %} selected{% endif %}>
+            {{ deck.name }}
+          </option>
+        {% endfor %}
+      </select>
+
+      <label class="field-label" for="lemma">Чешское слово</label>
+      <input id="lemma" name="lemma" value="{{ card_form.lemma }}">
+
+      <label class="field-label" for="translation">Русский перевод</label>
+      <input id="translation" name="translation" value="{{ card_form.translation }}">
+
+      <label class="field-label" for="notes">Заметки</label>
+      <textarea id="notes" name="notes" rows="4">{{ card_form.notes }}</textarea>
+
+      <div class="metadata-grid">
+        <p class="field-label">Дополнительные поля</p>
+        {% for row in card_form.metadata_rows %}
+          {% set index = loop.index %}
+          <div class="metadata-grid__row">
+            <input
+              aria-label="Ключ метаданных {{ index }}"
+              name="metadata_key_{{ index }}"
+              value="{{ row.key }}"
+              placeholder="Ключ"
+            >
+            <input
+              aria-label="Значение метаданных {{ index }}"
+              name="metadata_value_{{ index }}"
+              value="{{ row.value }}"
+              placeholder="Значение"
+            >
+          </div>
+        {% endfor %}
+      </div>
+
+      <div class="action-row">
+        <button class="button button--primary" type="submit">Сохранить</button>
+        <a class="button" href="{{ url_for('main.cards_page', deck=card_form.deck_id) }}">Назад к карточкам</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

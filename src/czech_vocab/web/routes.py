@@ -18,6 +18,9 @@ from czech_vocab.repositories.records import (
 )
 from czech_vocab.services import (
     CardCatalogService,
+    CardEditForm,
+    CardEditMetadataRow,
+    CardEditService,
     DashboardService,
     DeckSettingsService,
     ImportService,
@@ -157,6 +160,41 @@ def cards_page() -> str:
     return render_template("cards.html", catalog_page=catalog_page)
 
 
+@main_bp.get("/cards/<int:card_id>/edit")
+def edit_card_page(card_id: int) -> str:
+    service = CardEditService(current_app.config["DATABASE_PATH"])
+    try:
+        form = service.get_form(card_id)
+    except LookupError as exc:
+        return str(exc), 404
+    return render_template("card_edit.html", card_form=form, decks=service.list_decks(), error=None)
+
+
+@main_bp.post("/cards/<int:card_id>/edit")
+def update_card_page(card_id: int):
+    service = CardEditService(current_app.config["DATABASE_PATH"])
+    form = _edit_form_from_request(card_id)
+    try:
+        updated = service.update_card(
+            card_id=card_id,
+            deck_id=form.deck_id,
+            lemma=form.lemma,
+            translation=form.translation,
+            notes=form.notes,
+            metadata_rows=[(item.key, item.value) for item in form.metadata_rows],
+        )
+    except ValueError as exc:
+        return render_template(
+            "card_edit.html",
+            card_form=form,
+            decks=service.list_decks(),
+            error=str(exc),
+        )
+    except LookupError as exc:
+        return str(exc), 404
+    return redirect(url_for("main.cards_page", deck=updated.deck_id))
+
+
 @main_bp.get("/stats")
 def stats_page() -> str:
     return render_template(
@@ -238,6 +276,25 @@ def _redirect_to_review(deck_id: str | None):
     if deck_id:
         return redirect(url_for("main.review_page", deck=deck_id))
     return redirect(url_for("main.review_page"))
+
+
+def _edit_form_from_request(card_id: int) -> CardEditForm:
+    metadata_rows = [
+        CardEditMetadataRow(
+            request.form[key],
+            request.form.get(f"metadata_value_{key.rsplit('_', 1)[-1]}", ""),
+        )
+        for key in sorted(request.form)
+        if key.startswith("metadata_key_")
+    ]
+    return CardEditForm(
+        card_id=card_id,
+        deck_id=_parse_page(request.form.get("deck_id", "1")),
+        lemma=request.form.get("lemma", ""),
+        translation=request.form.get("translation", ""),
+        notes=request.form.get("notes", ""),
+        metadata_rows=metadata_rows or [CardEditMetadataRow("", "")],
+    )
 
 
 def _serialize_undo_snapshot(snapshot: UndoReviewSnapshot) -> dict[str, object]:

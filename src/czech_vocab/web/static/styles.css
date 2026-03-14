@@ -219,6 +219,7 @@ button {
 input[type="file"],
 input[type="text"],
 select,
+textarea,
 input:not([type]) {
   width: 100%;
   max-width: 28rem;
@@ -294,6 +295,25 @@ input:not([type]) {
 .card-list__deck {
   margin: 0 0 0.35rem;
   color: var(--muted);
+}
+
+.edit-card-panel {
+  max-width: 44rem;
+}
+
+.form-error {
+  margin: 0 0 1rem;
+  color: #8b2d1f;
+  font-weight: 700;
+}
+
+.metadata-grid {
+  margin: 1rem 0;
+}
+
+.metadata-grid__row {
+  display: grid;
+  gap: 0.75rem;
 }
 
 .card-list__item + .card-list__item {
