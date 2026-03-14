@@ -26,5 +26,14 @@ def create_app(
     if test_config:
         app.config.update(test_config)
     initialize_database(Path(app.config["DATABASE_PATH"]))
+    app.jinja_env.filters["review_empty_message"] = _review_empty_message
     app.register_blueprint(main_bp)
     return app
+
+
+def _review_empty_message(reason: str | None, deck_name: str) -> str:
+    if reason == "no_cards":
+        return f"В колоде «{deck_name}» пока нет карточек."
+    if reason == "new_limit_reached":
+        return "Лимит новых карточек на сегодня достигнут. Возвращайтесь позже."
+    return "Сейчас нет карточек для повторения в этой колоде."

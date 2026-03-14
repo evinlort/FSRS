@@ -2,7 +2,13 @@ from datetime import UTC, datetime
 
 from flask import Blueprint, current_app, redirect, render_template, request, url_for
 
-from czech_vocab.services import CardCatalogService, DashboardService, ImportService, StudyService
+from czech_vocab.services import (
+    CardCatalogService,
+    DashboardService,
+    DeckSettingsService,
+    ImportService,
+    StudyService,
+)
 
 main_bp = Blueprint("main", __name__)
 
@@ -34,15 +40,25 @@ def import_csv() -> str:
 @main_bp.get("/review")
 def review_page() -> str:
     service = StudyService(current_app.config["DATABASE_PATH"])
-    deck_id = _parse_page(request.args.get("deck", "")) if request.args.get("deck") else None
-    review_card = service.get_next_due_card(now=datetime.now(UTC), deck_id=deck_id)
-    return render_template("review.html", review_card=review_card)
+    deck_service = DeckSettingsService(current_app.config["DATABASE_PATH"])
+    requested_deck_id = None
+    if request.args.get("deck"):
+        requested_deck_id = _parse_page(request.args.get("deck", ""))
+    selected_deck = _resolve_deck(deck_service, requested_deck_id)
+    queue_state = service.get_queue_state(now=datetime.now(UTC), deck_id=selected_deck.id)
+    return render_template(
+        "review.html",
+        review_card=queue_state.card,
+        review_empty_reason=queue_state.empty_reason,
+        review_deck=selected_deck,
+    )
 
 
 @main_bp.post("/review/<int:card_id>/grade")
 def submit_review(card_id: int):
     service = StudyService(current_app.config["DATABASE_PATH"])
     rating = request.form.get("rating", "")
+    deck_id = request.form.get("deck", "")
     try:
         service.submit_review(
             card_id=card_id,
@@ -53,6 +69,8 @@ def submit_review(card_id: int):
         return str(exc), 400
     except LookupError as exc:
         return str(exc), 404
+    if deck_id:
+        return redirect(url_for("main.review_page", deck=deck_id))
     return redirect(url_for("main.review_page"))
 
 
@@ -88,3 +106,12 @@ def _parse_page(raw_page: str) -> int:
         return int(raw_page)
     except ValueError:
         return 1
+
+
+def _resolve_deck(deck_service: DeckSettingsService, deck_id: int | None):
+    if deck_id is None:
+        return deck_service.get_default_deck()
+    for deck in deck_service.list_decks():
+        if deck.id == deck_id:
+            return deck
+    return deck_service.get_default_deck()

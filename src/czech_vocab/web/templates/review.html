@@ -4,35 +4,58 @@
 {% block page_eyebrow %}FSRS{% endblock %}
 {% block page_title %}Повторение{% endblock %}
 {% block page_intro %}
-  <p>Здесь показывается следующая карточка, которую пора повторить.</p>
+  <p>Колода: {{ review_deck.name }}</p>
 {% endblock %}
 
 {% block content %}
-  <section class="panel">
+  <section class="panel review-panel" data-review-root>
     {% if review_card %}
       <article class="study-card">
+        <p class="review-context">Колода: {{ review_deck.name }}</p>
         <h2 class="study-card__title">{{ review_card.lemma }}</h2>
-        <p><strong>Перевод:</strong> {{ review_card.translation }}</p>
-        {% if review_card.notes %}
-          <p><strong>Заметки:</strong> {{ review_card.notes }}</p>
-        {% endif %}
-        {% if review_card.metadata %}
-          <dl>
-            {% for key, value in review_card.metadata.items() %}
-              <dt>{{ key }}</dt>
-              <dd>{{ value }}</dd>
-            {% endfor %}
-          </dl>
-        {% endif %}
-        <form class="action-row" method="post" action="{{ url_for('main.submit_review', card_id=review_card.card_id) }}">
-          <button class="button" type="submit" name="rating" value="Again">Again</button>
-          <button class="button" type="submit" name="rating" value="Hard">Hard</button>
-          <button class="button button--primary" type="submit" name="rating" value="Good">Good</button>
-          <button class="button" type="submit" name="rating" value="Easy">Easy</button>
+        <button class="button button--primary" type="button" data-review-reveal-btn>
+          Показать ответ
+        </button>
+        <section class="review-answer" data-review-answer hidden>
+          <p><strong>Перевод:</strong> {{ review_card.translation }}</p>
+        </section>
+        <details class="review-details" data-review-details hidden>
+          <summary>Подробнее</summary>
+          {% if review_card.notes %}
+            <p><strong>Заметки:</strong> {{ review_card.notes }}</p>
+          {% endif %}
+          {% if review_card.metadata %}
+            <dl>
+              {% for key, value in review_card.metadata.items() %}
+                <dt>{{ key }}</dt>
+                <dd>{{ value }}</dd>
+              {% endfor %}
+            </dl>
+          {% endif %}
+        </details>
+        <form
+          class="action-row review-grades"
+          method="post"
+          action="{{ url_for('main.submit_review', card_id=review_card.card_id) }}"
+          hidden
+          data-review-grade-panel
+        >
+          <input type="hidden" name="deck" value="{{ review_deck.id }}">
+          <button class="button" type="submit" name="rating" value="Again" data-rating-key="1">Again</button>
+          <button class="button" type="submit" name="rating" value="Hard" data-rating-key="2">Hard</button>
+          <button class="button button--primary" type="submit" name="rating" value="Good" data-rating-key="3">Good</button>
+          <button class="button" type="submit" name="rating" value="Easy" data-rating-key="4">Easy</button>
         </form>
       </article>
     {% else %}
-      <p>Сейчас нет карточек для повторения.</p>
+      <p>{{ review_empty_reason | review_empty_message(review_deck.name) }}</p>
+      <div class="action-row">
+        {% if review_empty_reason == "no_cards" %}
+          <a class="button button--primary" href="{{ url_for('main.import_page') }}">Импортировать слова</a>
+        {% else %}
+          <a class="button" href="{{ url_for('main.home') }}">Вернуться на главную</a>
+        {% endif %}
+      </div>
     {% endif %}
   </section>
 {% endblock %}

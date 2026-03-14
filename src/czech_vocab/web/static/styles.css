@@ -253,6 +253,30 @@ input:not([type]) {
   color: var(--muted);
 }
 
+.review-panel {
+  max-width: 42rem;
+}
+
+.review-context {
+  margin: 0 0 0.5rem;
+  color: var(--muted);
+}
+
+.review-answer,
+.review-details,
+.review-grades {
+  margin-top: 1rem;
+}
+
+.review-details summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.review-grades .button {
+  min-width: 6rem;
+}
+
 .card-list {
   list-style: none;
   margin: 0;
