@@ -4,15 +4,53 @@
 {% block page_eyebrow %}Каталог{% endblock %}
 {% block page_title %}Карточки{% endblock %}
 {% block page_intro %}
-  <p>Ищите карточки по чешскому слову, переводу или заметкам.</p>
+  <p>Фильтруйте карточки по колоде, статусу и области поиска без переключения между режимами.</p>
 {% endblock %}
 
 {% block content %}
   <section class="panel">
-    <form method="get" action="{{ url_for('main.cards_page') }}">
+    <form class="catalog-filters" method="get" action="{{ url_for('main.cards_page') }}">
+      <label class="field-label" for="deck">Колода</label>
+      <select id="deck" name="deck">
+        {% for deck in catalog_page.deck_options %}
+          <option value="{{ deck.value }}"{% if catalog_page.selected_deck == deck.value %} selected{% endif %}>
+            {{ deck.label }}
+          </option>
+        {% endfor %}
+      </select>
+
+      <label class="field-label" for="status">Статус</label>
+      <select id="status" name="status">
+        {% for value, label in [("all", "Все"), ("due", "К повторению"), ("new", "Новые"), ("learned", "Изученные")] %}
+          <option value="{{ value }}"{% if catalog_page.selected_status == value %} selected{% endif %}>
+            {{ label }}
+          </option>
+        {% endfor %}
+      </select>
+
+      <label class="field-label" for="search_in">Искать в</label>
+      <select id="search_in" name="search_in">
+        {% for value, label in [("all", "Везде"), ("czech", "Чешский"), ("russian", "Русский")] %}
+          <option value="{{ value }}"{% if catalog_page.search_scope == value %} selected{% endif %}>
+            {{ label }}
+          </option>
+        {% endfor %}
+      </select>
+
       <label class="field-label" for="q">Поиск</label>
-      <input id="q" name="q" value="{{ catalog_page.query }}">
-      <button class="button button--primary" type="submit">Найти</button>
+      <input id="q" name="q" value="{{ catalog_page.query }}" data-search-input>
+
+      <div class="action-row">
+        <button class="button button--primary" type="submit">Применить</button>
+        {% if catalog_page.has_filters_applied %}
+          <a
+            class="button"
+            href="{{ url_for('main.cards_page', deck=catalog_page.selected_deck, status='all', search_in=catalog_page.search_scope) }}"
+          >
+            Сбросить поиск
+          </a>
+        {% endif %}
+      </div>
     </form>
   </section>
 
@@ -21,6 +59,7 @@
       <ul class="card-list">
         {% for card in catalog_page.cards %}
           <li class="card-list__item">
+            <p class="card-list__deck">{{ card.deck_name }}</p>
             <h2 class="card-list__title">{{ card.lemma }}</h2>
             <p><strong>Перевод:</strong> {{ card.translation }}</p>
             {% if card.notes %}
@@ -36,20 +75,44 @@
                 {% endfor %}
               </dl>
             {% endif %}
+            <p><a class="button" href="{{ card.edit_path }}">Редактировать</a></p>
           </li>
         {% endfor %}
       </ul>
+    {% elif catalog_page.is_empty_catalog %}
+      <p>Пока нет карточек. Начните с импорта словаря.</p>
+      <div class="action-row">
+        <a class="button button--primary" href="{{ url_for('main.import_page') }}">Импортировать слова</a>
+      </div>
     {% else %}
-      <p>Карточки по этому запросу не найдены.</p>
+      <p>Ничего не найдено по текущим фильтрам.</p>
+      <div class="action-row">
+        <a
+          class="button"
+          href="{{ url_for('main.cards_page', deck=catalog_page.selected_deck, status='all', search_in=catalog_page.search_scope) }}"
+        >
+          Сбросить поиск
+        </a>
+      </div>
     {% endif %}
   </section>
 
   <nav class="pager" aria-label="Пагинация">
     {% if catalog_page.has_previous %}
-      <a class="button" href="{{ url_for('main.cards_page', q=catalog_page.query, page=catalog_page.page - 1) }}">Назад</a>
+      <a
+        class="button"
+        href="{{ url_for('main.cards_page', deck=catalog_page.selected_deck, status=catalog_page.selected_status, search_in=catalog_page.search_scope, q=catalog_page.query, page=catalog_page.page - 1) }}"
+      >
+        Назад
+      </a>
     {% endif %}
     {% if catalog_page.has_next %}
-      <a class="button" href="{{ url_for('main.cards_page', q=catalog_page.query, page=catalog_page.page + 1) }}">Дальше</a>
+      <a
+        class="button"
+        href="{{ url_for('main.cards_page', deck=catalog_page.selected_deck, status=catalog_page.selected_status, search_in=catalog_page.search_scope, q=catalog_page.query, page=catalog_page.page + 1) }}"
+      >
+        Дальше
+      </a>
     {% endif %}
   </nav>
 {% endblock %}

@@ -1,12 +1,29 @@
 const navToggle = document.querySelector("[data-nav-toggle]");
 const nav = document.querySelector("[data-nav]");
 const reviewRoot = document.querySelector("[data-review-root]");
+const catalogSearchInput = document.querySelector("[data-search-input]");
 
 if (navToggle && nav) {
   navToggle.addEventListener("click", () => {
     const isOpen = nav.dataset.open === "true";
     nav.dataset.open = String(!isOpen);
     navToggle.setAttribute("aria-expanded", String(!isOpen));
+  });
+}
+
+if (catalogSearchInput) {
+  document.addEventListener("keydown", (event) => {
+    const activeTag = document.activeElement?.tagName;
+    if (
+      event.key !== "/" ||
+      activeTag === "INPUT" ||
+      activeTag === "TEXTAREA" ||
+      activeTag === "SELECT"
+    ) {
+      return;
+    }
+    event.preventDefault();
+    catalogSearchInput.focus();
   });
 }
 

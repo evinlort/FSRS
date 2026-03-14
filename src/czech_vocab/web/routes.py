@@ -146,9 +146,14 @@ def undo_review():
 @main_bp.get("/cards")
 def cards_page() -> str:
     service = CardCatalogService(current_app.config["DATABASE_PATH"])
-    query = request.args.get("q", "")
-    page = _parse_page(request.args.get("page", "1"))
-    catalog_page = service.get_page(query=query, page=page)
+    catalog_page = service.get_page(
+        now=datetime.now(UTC),
+        deck=request.args.get("deck", "all"),
+        status=request.args.get("status", "all"),
+        search_in=request.args.get("search_in", "all"),
+        query=request.args.get("q", ""),
+        page=_parse_page(request.args.get("page", "1")),
+    )
     return render_template("cards.html", catalog_page=catalog_page)
 
 
