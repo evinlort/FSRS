@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS review_logs (
     rating TEXT NOT NULL,
     reviewed_at TEXT NOT NULL,
     review_duration_seconds INTEGER,
+    undone_at TEXT,
     FOREIGN KEY (card_id) REFERENCES cards (id) ON DELETE CASCADE
 );
 
@@ -68,6 +69,7 @@ def initialize_database(database_path: Path) -> None:
         connection.execute("PRAGMA foreign_keys = OFF")
         connection.executescript(BASE_SCHEMA_SQL)
         _seed_defaults(connection)
+        _ensure_review_logs_schema(connection)
         if _cards_need_migration(connection):
             _migrate_cards(connection)
         else:
@@ -114,6 +116,14 @@ def _cards_need_migration(connection: sqlite3.Connection) -> bool:
         return False
     columns = {row["name"] for row in connection.execute("PRAGMA table_info(cards)").fetchall()}
     return "deck_id" not in columns
+
+
+def _ensure_review_logs_schema(connection: sqlite3.Connection) -> None:
+    if not _table_exists(connection, "review_logs"):
+        return
+    columns = {row["name"] for row in connection.execute("PRAGMA table_info(review_logs)")}
+    if "undone_at" not in columns:
+        connection.execute("ALTER TABLE review_logs ADD COLUMN undone_at TEXT")
 
 
 def _migrate_cards(connection: sqlite3.Connection) -> None:

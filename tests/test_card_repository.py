@@ -115,14 +115,17 @@ def test_insert_review_log_and_read_it_back(tmp_path: Path) -> None:
         review_duration_seconds=17,
     )
 
-    assert repository.list_review_logs(created.id) == [
-        ReviewLogRecord(
-            card_id=created.id,
-            rating="Good",
-            reviewed_at=reviewed_at,
-            review_duration_seconds=17,
-        ),
-    ]
+    logs = repository.list_review_logs(created.id)
+
+    assert len(logs) == 1
+    assert logs[0] == ReviewLogRecord(
+        id=logs[0].id,
+        card_id=created.id,
+        rating="Good",
+        reviewed_at=reviewed_at,
+        review_duration_seconds=17,
+        undone_at=None,
+    )
 
 
 def test_query_due_cards_and_search_cards(tmp_path: Path) -> None:

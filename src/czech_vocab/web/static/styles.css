@@ -262,6 +262,10 @@ input:not([type]) {
   color: var(--muted);
 }
 
+.review-undo {
+  margin: 0 0 1rem;
+}
+
 .review-answer,
 .review-details,
 .review-grades {

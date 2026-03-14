@@ -118,6 +118,48 @@ def test_submit_review_updates_schedule_and_adds_one_review_log(tmp_path: Path) 
     assert logs[0].review_duration_seconds == 13
 
 
+def test_undo_review_restores_previous_schedule_and_marks_log_undone(tmp_path: Path) -> None:
+    service = build_service(tmp_path / "study.sqlite3")
+    review_at = datetime(2026, 3, 14, 12, 0, tzinfo=UTC)
+    created = create_card(service, "kniha", "книга", due_at=review_at, learned=False)
+
+    result = service.submit_review(
+        card_id=created.id,
+        rating="Good",
+        review_at=review_at,
+        review_duration_seconds=13,
+    )
+
+    service.undo_review(snapshot=result.undo_snapshot, undone_at=review_at + timedelta(minutes=1))
+
+    restored = service._repository.get_card_by_id(created.id)
+    logs = service._repository.list_review_logs(created.id)
+    assert restored is not None
+    assert restored.due_at == created.due_at
+    assert restored.last_review_at == created.last_review_at
+    assert restored.fsrs_state == created.fsrs_state
+    assert len(logs) == 1
+    assert logs[0].undone_at == review_at + timedelta(minutes=1)
+    queue = service.get_queue_state(now=review_at + timedelta(minutes=2))
+    assert queue.card is not None
+    assert queue.card.card_id == created.id
+
+
+def test_undo_review_rejects_second_attempt(tmp_path: Path) -> None:
+    service = build_service(tmp_path / "study.sqlite3")
+    review_at = datetime(2026, 3, 14, 12, 0, tzinfo=UTC)
+    created = create_card(service, "pes", "собака", due_at=review_at, learned=False)
+    result = service.submit_review(card_id=created.id, rating="Good", review_at=review_at)
+
+    service.undo_review(snapshot=result.undo_snapshot, undone_at=review_at + timedelta(minutes=1))
+
+    with pytest.raises(ValueError, match="Undo is no longer available"):
+        service.undo_review(
+            snapshot=result.undo_snapshot,
+            undone_at=review_at + timedelta(minutes=2),
+        )
+
+
 def test_invalid_rating_does_not_mutate_database(tmp_path: Path) -> None:
     service = build_service(tmp_path / "study.sqlite3")
     review_at = datetime(2026, 3, 14, 12, 0, tzinfo=UTC)

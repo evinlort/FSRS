@@ -145,30 +145,38 @@ class CardRepository:
         connection: sqlite3.Connection | None = None,
     ) -> ReviewLogRecord:
         with self._use_connection(connection) as active_connection:
-            active_connection.execute(
+            cursor = active_connection.execute(
                 """
-                INSERT INTO review_logs (card_id, rating, reviewed_at, review_duration_seconds)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO review_logs (
+                    card_id,
+                    rating,
+                    reviewed_at,
+                    review_duration_seconds,
+                    undone_at
+                ) VALUES (?, ?, ?, ?, ?)
                 """,
                 (
                     card_id,
                     rating,
                     serialize_datetime(reviewed_at),
                     review_duration_seconds,
+                    None,
                 ),
             )
         return ReviewLogRecord(
-            card_id,
-            rating,
-            reviewed_at.astimezone(UTC),
-            review_duration_seconds,
+            id=cursor.lastrowid,
+            card_id=card_id,
+            rating=rating,
+            reviewed_at=reviewed_at.astimezone(UTC),
+            review_duration_seconds=review_duration_seconds,
+            undone_at=None,
         )
 
     def list_review_logs(self, card_id: int) -> list[ReviewLogRecord]:
         with self._connect() as connection:
             rows = connection.execute(
                 """
-                SELECT card_id, rating, reviewed_at, review_duration_seconds
+                SELECT id, card_id, rating, reviewed_at, review_duration_seconds, undone_at
                 FROM review_logs
                 WHERE card_id = ?
                 ORDER BY reviewed_at, id
@@ -177,13 +185,51 @@ class CardRepository:
             ).fetchall()
         return [
             ReviewLogRecord(
+                id=row["id"],
                 card_id=row["card_id"],
                 rating=row["rating"],
                 reviewed_at=parse_datetime(row["reviewed_at"]),
                 review_duration_seconds=row["review_duration_seconds"],
+                undone_at=parse_datetime(row["undone_at"]),
             )
             for row in rows
         ]
+
+    def get_latest_active_review_log(
+        self,
+        *,
+        card_id: int,
+        connection: sqlite3.Connection | None = None,
+    ) -> ReviewLogRecord | None:
+        with self._use_connection(connection) as active_connection:
+            row = active_connection.execute(
+                """
+                SELECT id, card_id, rating, reviewed_at, review_duration_seconds, undone_at
+                FROM review_logs
+                WHERE card_id = ? AND undone_at IS NULL
+                ORDER BY reviewed_at DESC, id DESC
+                LIMIT 1
+                """,
+                (card_id,),
+            ).fetchone()
+        return _row_to_review_log(row) if row else None
+
+    def mark_review_log_undone(
+        self,
+        *,
+        review_log_id: int,
+        undone_at: datetime,
+        connection: sqlite3.Connection | None = None,
+    ) -> None:
+        with self._use_connection(connection) as active_connection:
+            active_connection.execute(
+                """
+                UPDATE review_logs
+                SET undone_at = ?
+                WHERE id = ? AND undone_at IS NULL
+                """,
+                (serialize_datetime(undone_at), review_log_id),
+            )
 
     def count_cards_in_deck(self, deck_id: int) -> int:
         with self._connect() as connection:
@@ -209,6 +255,7 @@ class CardRepository:
                     FROM cards
                     JOIN review_logs ON review_logs.card_id = cards.id
                     WHERE cards.deck_id = ?
+                      AND review_logs.undone_at IS NULL
                     GROUP BY cards.id
                     HAVING MIN(review_logs.reviewed_at) >= ?
                        AND MIN(review_logs.reviewed_at) < ?
@@ -235,6 +282,7 @@ class CardRepository:
                       SELECT 1
                       FROM review_logs
                       WHERE review_logs.card_id = cards.id
+                        AND review_logs.undone_at IS NULL
                   )
                 ORDER BY cards.due_at, cards.id
                 """,
@@ -253,6 +301,7 @@ class CardRepository:
                       SELECT 1
                       FROM review_logs
                       WHERE review_logs.card_id = cards.id
+                        AND review_logs.undone_at IS NULL
                   )
                 ORDER BY cards.id
                 """,
@@ -309,3 +358,14 @@ class CardRepository:
             return
         with self._connect() as active_connection:
             yield active_connection
+
+
+def _row_to_review_log(row: sqlite3.Row) -> ReviewLogRecord:
+    return ReviewLogRecord(
+        id=row["id"],
+        card_id=row["card_id"],
+        rating=row["rating"],
+        reviewed_at=parse_datetime(row["reviewed_at"]),
+        review_duration_seconds=row["review_duration_seconds"],
+        undone_at=parse_datetime(row["undone_at"]),
+    )

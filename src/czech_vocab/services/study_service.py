@@ -4,6 +4,7 @@ from pathlib import Path
 
 from czech_vocab.domain import FsrsScheduler
 from czech_vocab.repositories import CardRecord, CardRepository
+from czech_vocab.repositories.records import UndoReviewSnapshot
 from czech_vocab.services.deck_settings_service import DeckSettingsService
 
 
@@ -23,6 +24,7 @@ class ReviewResult:
     rating: str
     reviewed_at: datetime
     due_at: datetime
+    undo_snapshot: UndoReviewSnapshot
 
 
 @dataclass(frozen=True)
@@ -66,6 +68,14 @@ class StudyService:
             card = self._repository.get_card_by_id(card_id, connection=connection)
             if card is None:
                 raise LookupError(f"Card not found: {card_id}")
+            previous_state = UndoReviewSnapshot(
+                card_id=card.id,
+                deck_id=card.deck_id,
+                review_log_id=0,
+                fsrs_state=card.fsrs_state,
+                due_at=card.due_at,
+                last_review_at=card.last_review_at,
+            )
             outcome = self._scheduler.apply_rating(
                 card_state=card.fsrs_state,
                 rating=rating,
@@ -79,7 +89,7 @@ class StudyService:
                 last_review_at=outcome.last_review_at,
                 connection=connection,
             )
-            self._repository.insert_review_log(
+            review_log = self._repository.insert_review_log(
                 card_id=card_id,
                 rating=outcome.review_log.rating,
                 reviewed_at=outcome.review_log.reviewed_at,
@@ -91,7 +101,39 @@ class StudyService:
             rating=outcome.review_log.rating,
             reviewed_at=outcome.review_log.reviewed_at,
             due_at=outcome.due_at,
+            undo_snapshot=UndoReviewSnapshot(
+                card_id=previous_state.card_id,
+                deck_id=previous_state.deck_id,
+                review_log_id=review_log.id,
+                fsrs_state=previous_state.fsrs_state,
+                due_at=previous_state.due_at,
+                last_review_at=previous_state.last_review_at,
+            ),
         )
+
+    def undo_review(self, *, snapshot: UndoReviewSnapshot, undone_at: datetime) -> None:
+        with self._repository.connect() as connection:
+            card = self._repository.get_card_by_id(snapshot.card_id, connection=connection)
+            if card is None:
+                raise LookupError(f"Card not found: {snapshot.card_id}")
+            latest_log = self._repository.get_latest_active_review_log(
+                card_id=snapshot.card_id,
+                connection=connection,
+            )
+            if latest_log is None or latest_log.id != snapshot.review_log_id:
+                raise ValueError("Undo is no longer available")
+            self._repository.update_schedule_state(
+                card_id=snapshot.card_id,
+                fsrs_state=snapshot.fsrs_state,
+                due_at=snapshot.due_at,
+                last_review_at=snapshot.last_review_at,
+                connection=connection,
+            )
+            self._repository.mark_review_log_undone(
+                review_log_id=snapshot.review_log_id,
+                undone_at=undone_at,
+                connection=connection,
+            )
 
     def _new_limit_reached(self, *, deck_id: int, now: datetime) -> bool:
         deck = self._deck_settings_service.get_default_deck()

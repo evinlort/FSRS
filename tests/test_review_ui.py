@@ -95,6 +95,68 @@ def test_posting_valid_grade_redirects_and_persists_review(client, app) -> None:
     assert logs[0].rating == "Good"
 
 
+def test_review_page_shows_undo_action_after_grading(client, app) -> None:
+    due_at = datetime(2026, 3, 14, 12, 0, tzinfo=UTC)
+    created = create_due_card(
+        app.config["DATABASE_PATH"],
+        lemma="most",
+        translation="мост",
+        notes="bridge",
+        metadata={},
+        due_at=due_at,
+    )
+
+    response = client.post(
+        f"/review/{created.id}/grade",
+        data={"rating": "Good", "deck": "1"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    page = response.get_data(as_text=True)
+    assert "Последний ответ сохранён." in page
+    assert "Отменить последний ответ" in page
+
+
+def test_undo_review_restores_card_state_and_hides_second_undo(client, app) -> None:
+    due_at = datetime(2026, 3, 14, 12, 0, tzinfo=UTC)
+    created = create_due_card(
+        app.config["DATABASE_PATH"],
+        lemma="hrad",
+        translation="замок",
+        notes="castle",
+        metadata={},
+        due_at=due_at,
+    )
+    repository = CardRepository(app.config["DATABASE_PATH"])
+
+    client.post(
+        f"/review/{created.id}/grade",
+        data={"rating": "Good", "deck": "1"},
+    )
+    response = client.post("/review/undo", data={"deck": "1"}, follow_redirects=True)
+
+    assert response.status_code == 200
+    page = response.get_data(as_text=True)
+    assert "Последний ответ отменён." in page
+    assert "Отменить последний ответ" not in page
+    restored = repository.get_card_by_id(created.id)
+    logs = repository.list_review_logs(created.id)
+    assert restored is not None
+    assert restored.last_review_at is None
+    assert restored.due_at == due_at
+    assert len(logs) == 1
+    assert logs[0].undone_at is not None
+
+
+def test_invalid_undo_attempt_shows_contextual_feedback(client) -> None:
+    response = client.post("/review/undo", data={"deck": "1"}, follow_redirects=True)
+
+    assert response.status_code == 200
+    page = response.get_data(as_text=True)
+    assert "Последний ответ уже нельзя отменить." in page
+
+
 def test_invalid_grade_returns_400_and_does_not_create_review_log(client, app) -> None:
     due_at = datetime(2026, 3, 14, 12, 0, tzinfo=UTC)
     created = create_due_card(

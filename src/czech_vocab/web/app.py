@@ -22,6 +22,7 @@ def create_app(
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
     app.config.from_mapping(
         DATABASE_PATH=Path(app.instance_path) / DEFAULT_DATABASE_NAME,
+        SECRET_KEY="dev-secret-key",
     )
     if test_config:
         app.config.update(test_config)

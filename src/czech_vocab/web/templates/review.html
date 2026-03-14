@@ -9,6 +9,12 @@
 
 {% block content %}
   <section class="panel review-panel" data-review-root>
+    {% if undo_available %}
+      <form class="review-undo" method="post" action="{{ url_for('main.undo_review') }}">
+        <input type="hidden" name="deck" value="{{ review_deck.id }}">
+        <button class="button" type="submit">Отменить последний ответ</button>
+      </form>
+    {% endif %}
     {% if review_card %}
       <article class="study-card">
         <p class="review-context">Колода: {{ review_deck.name }}</p>

@@ -55,10 +55,22 @@ class AppSettingsRecord:
 
 @dataclass(frozen=True)
 class ReviewLogRecord:
+    id: int
     card_id: int
     rating: str
     reviewed_at: datetime
     review_duration_seconds: int | None
+    undone_at: datetime | None
+
+
+@dataclass(frozen=True)
+class UndoReviewSnapshot:
+    card_id: int
+    deck_id: int
+    review_log_id: int
+    fsrs_state: dict[str, Any]
+    due_at: datetime | None
+    last_review_at: datetime | None
 
 
 def build_identity_key(lemma: str, translation: str) -> str:

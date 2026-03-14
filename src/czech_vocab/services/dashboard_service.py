@@ -94,6 +94,7 @@ class DashboardService:
                 FROM review_logs
                 JOIN cards ON cards.id = review_logs.card_id
                 JOIN decks ON decks.id = cards.deck_id
+                WHERE review_logs.undone_at IS NULL
                 ORDER BY review_logs.reviewed_at DESC, review_logs.id DESC
                 LIMIT 5
                 """
