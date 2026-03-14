@@ -1,4 +1,5 @@
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 
 from czech_vocab.repositories.records import (
@@ -24,10 +25,11 @@ class AppSettingsRepository:
         *,
         default_desired_retention: float,
         default_daily_new_limit: int,
+        connection: sqlite3.Connection | None = None,
     ) -> AppSettingsRecord:
         timestamp = serialize_datetime(utc_now())
-        with self._connect() as connection:
-            connection.execute(
+        with self._use_connection(connection) as active_connection:
+            active_connection.execute(
                 """
                 UPDATE app_settings
                 SET default_desired_retention = ?, default_daily_new_limit = ?, updated_at = ?
@@ -35,7 +37,9 @@ class AppSettingsRepository:
                 """,
                 (default_desired_retention, default_daily_new_limit, timestamp),
             )
-            row = connection.execute("SELECT * FROM app_settings WHERE id = 1").fetchone()
+            row = active_connection.execute(
+                "SELECT * FROM app_settings WHERE id = 1"
+            ).fetchone()
         assert row is not None
         return row_to_settings(row)
 
@@ -44,3 +48,11 @@ class AppSettingsRepository:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         return connection
+
+    @contextmanager
+    def _use_connection(self, connection: sqlite3.Connection | None):
+        if connection is not None:
+            yield connection
+            return
+        with self._connect() as active_connection:
+            yield active_connection

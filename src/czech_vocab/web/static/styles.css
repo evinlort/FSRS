@@ -307,6 +307,12 @@ input:not([type]) {
   font-weight: 700;
 }
 
+.field-error {
+  margin: -0.45rem 0 0.8rem;
+  color: #8b2d1f;
+  font-weight: 700;
+}
+
 .metadata-grid {
   margin: 1rem 0;
 }
@@ -320,6 +326,27 @@ input:not([type]) {
   margin-top: 1rem;
   padding-top: 1rem;
   border-top: 1px solid var(--border);
+}
+
+.settings-panel + .settings-panel,
+form > .settings-panel + .action-row {
+  margin-top: 1rem;
+}
+
+.settings-decks {
+  display: grid;
+  gap: 1rem;
+}
+
+.settings-deck {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(239, 230, 216, 0.45);
+}
+
+.settings-deck__title {
+  margin: 0 0 0.75rem;
 }
 
 :focus-visible {
@@ -340,6 +367,10 @@ input:not([type]) {
   }
 
   .panel-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settings-decks {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

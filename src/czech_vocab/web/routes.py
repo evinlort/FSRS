@@ -24,6 +24,8 @@ from czech_vocab.services import (
     DashboardService,
     DeckSettingsService,
     ImportService,
+    SettingsPageService,
+    SettingsValidationError,
     StatsService,
     StudyService,
 )
@@ -205,11 +207,18 @@ def stats_page() -> str:
 
 @main_bp.get("/settings")
 def settings_page() -> str:
-    return render_template(
-        "placeholder.html",
-        page_name="Настройки",
-        page_message="Раздел настроек будет добавлен на следующем UI-шаге.",
-    )
+    return _render_settings_page()
+
+
+@main_bp.post("/settings")
+def update_settings_page():
+    service = SettingsPageService(current_app.config["DATABASE_PATH"])
+    try:
+        service.update_settings(**_settings_form_payload(service))
+    except SettingsValidationError as exc:
+        return render_template("settings.html", settings_page=exc.page_data), 400
+    flash("Настройки сохранены.", "success")
+    return redirect(url_for("main.settings_page"))
 
 
 def _parse_page(raw_page: str) -> int:
@@ -251,11 +260,37 @@ def _render_import_page(
     )
 
 
+def _render_settings_page() -> str:
+    service = SettingsPageService(current_app.config["DATABASE_PATH"])
+    return render_template("settings.html", settings_page=service.get_page_data())
+
+
 def _import_form_state() -> dict[str, object]:
     deck_id = request.form.get("deck_id", "")
     return {
         "deck_id": _parse_page(deck_id) if deck_id else None,
         "new_deck_name": request.form.get("new_deck_name", "").strip(),
+    }
+
+
+def _settings_form_payload(service: SettingsPageService) -> dict[str, object]:
+    page_data = service.get_page_data()
+    return {
+        "default_desired_retention": request.form.get("default_desired_retention", ""),
+        "default_daily_new_limit": request.form.get("default_daily_new_limit", ""),
+        "deck_updates": {
+            deck.deck_id: {
+                "desired_retention": request.form.get(
+                    f"deck_{deck.deck_id}_desired_retention",
+                    "",
+                ),
+                "daily_new_limit": request.form.get(
+                    f"deck_{deck.deck_id}_daily_new_limit",
+                    "",
+                ),
+            }
+            for deck in page_data.decks
+        },
     }
 
 

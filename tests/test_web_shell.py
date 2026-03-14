@@ -33,7 +33,7 @@ def test_existing_pages_render_page_titles_inside_shared_layout(client) -> None:
     assert "<title>Карточки" in cards_page.get_data(as_text=True)
 
 
-def test_placeholder_stats_and_settings_pages_render_in_shell(client) -> None:
+def test_stats_and_settings_pages_render_in_shell(client) -> None:
     stats_page = client.get("/stats")
     settings_page = client.get("/settings")
 

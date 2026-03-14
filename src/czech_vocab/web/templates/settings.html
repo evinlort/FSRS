@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Настройки{% endblock %}
+{% block page_eyebrow %}Параметры{% endblock %}
+{% block page_title %}Настройки повторения{% endblock %}
+{% block page_intro %}
+  <p>Измените общие параметры, ограничения по новым карточкам и настройки каждой колоды.</p>
+{% endblock %}
+
+{% block content %}
+  <form method="post" action="{{ url_for('main.update_settings_page') }}">
+    <section class="panel settings-panel">
+      <h2 class="panel__title">Общие настройки</h2>
+
+      <label class="field-label" for="default_desired_retention">Retention по умолчанию</label>
+      <input
+        id="default_desired_retention"
+        name="default_desired_retention"
+        inputmode="decimal"
+        value="{{ settings_page.default_desired_retention }}"
+      >
+      {% if settings_page.errors.default_desired_retention %}
+        <p class="field-error">{{ settings_page.errors.default_desired_retention }}</p>
+      {% endif %}
+
+      <label class="field-label" for="default_daily_new_limit">Лимит новых карточек в день</label>
+      <input
+        id="default_daily_new_limit"
+        name="default_daily_new_limit"
+        inputmode="numeric"
+        value="{{ settings_page.default_daily_new_limit }}"
+      >
+      {% if settings_page.errors.default_daily_new_limit %}
+        <p class="field-error">{{ settings_page.errors.default_daily_new_limit }}</p>
+      {% endif %}
+    </section>
+
+    <section class="panel settings-panel">
+      <h2 class="panel__title">Колоды</h2>
+      <div class="settings-decks">
+        {% for deck in settings_page.decks %}
+          <article class="settings-deck">
+            <h3 class="settings-deck__title">{{ deck.name }}</h3>
+
+            <label class="field-label" for="deck_{{ deck.deck_id }}_desired_retention">Retention</label>
+            <input
+              id="deck_{{ deck.deck_id }}_desired_retention"
+              name="deck_{{ deck.deck_id }}_desired_retention"
+              inputmode="decimal"
+              value="{{ deck.desired_retention }}"
+            >
+            {% set retention_error = settings_page.errors.get('deck_' ~ deck.deck_id ~ '_desired_retention') %}
+            {% if retention_error %}
+              <p class="field-error">{{ retention_error }}</p>
+            {% endif %}
+
+            <label class="field-label" for="deck_{{ deck.deck_id }}_daily_new_limit">Новых в день</label>
+            <input
+              id="deck_{{ deck.deck_id }}_daily_new_limit"
+              name="deck_{{ deck.deck_id }}_daily_new_limit"
+              inputmode="numeric"
+              value="{{ deck.daily_new_limit }}"
+            >
+            {% set limit_error = settings_page.errors.get('deck_' ~ deck.deck_id ~ '_daily_new_limit') %}
+            {% if limit_error %}
+              <p class="field-error">{{ limit_error }}</p>
+            {% endif %}
+          </article>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="panel settings-panel">
+      <h2 class="panel__title">Горячие клавиши</h2>
+      <ul class="summary-list">
+        <li><strong>Space</strong><span>Показать ответ на карточке.</span></li>
+        <li><strong>1 / 2 / 3 / 4</strong><span>Again / Hard / Good / Easy после показа ответа.</span></li>
+        <li><strong>/</strong><span>Перейти к поиску на странице карточек.</span></li>
+        <li><strong>Enter</strong><span>Подтвердить импорт, когда кнопка подтверждения в фокусе.</span></li>
+      </ul>
+    </section>
+
+    <div class="action-row">
+      <button class="button button--primary" type="submit">Сохранить настройки</button>
+    </div>
+  </form>
+{% endblock %}
