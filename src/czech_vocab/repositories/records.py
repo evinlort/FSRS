@@ -16,11 +16,13 @@ class CardCreate:
     fsrs_state: dict[str, Any]
     due_at: datetime | None
     last_review_at: datetime | None
+    deck_id: int = 1
 
 
 @dataclass(frozen=True)
 class CardRecord:
     id: int
+    deck_id: int
     identity_key: str
     lemma: str
     translation: str
@@ -29,6 +31,24 @@ class CardRecord:
     fsrs_state: dict[str, Any]
     due_at: datetime | None
     last_review_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class DeckRecord:
+    id: int
+    name: str
+    desired_retention: float
+    daily_new_limit: int
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class AppSettingsRecord:
+    default_desired_retention: float
+    default_daily_new_limit: int
     created_at: datetime
     updated_at: datetime
 
@@ -62,6 +82,7 @@ def parse_datetime(value: str | None) -> datetime | None:
 def row_to_card(row: sqlite3.Row) -> CardRecord:
     return CardRecord(
         id=row["id"],
+        deck_id=row["deck_id"],
         identity_key=row["identity_key"],
         lemma=row["lemma"],
         translation=row["translation"],
@@ -70,6 +91,26 @@ def row_to_card(row: sqlite3.Row) -> CardRecord:
         fsrs_state=json.loads(row["fsrs_state_json"]),
         due_at=parse_datetime(row["due_at"]),
         last_review_at=parse_datetime(row["last_review_at"]),
+        created_at=parse_datetime(row["created_at"]),
+        updated_at=parse_datetime(row["updated_at"]),
+    )
+
+
+def row_to_deck(row: sqlite3.Row) -> DeckRecord:
+    return DeckRecord(
+        id=row["id"],
+        name=row["name"],
+        desired_retention=row["desired_retention"],
+        daily_new_limit=row["daily_new_limit"],
+        created_at=parse_datetime(row["created_at"]),
+        updated_at=parse_datetime(row["updated_at"]),
+    )
+
+
+def row_to_settings(row: sqlite3.Row) -> AppSettingsRecord:
+    return AppSettingsRecord(
+        default_desired_retention=row["default_desired_retention"],
+        default_daily_new_limit=row["default_daily_new_limit"],
         created_at=parse_datetime(row["created_at"]),
         updated_at=parse_datetime(row["updated_at"]),
     )

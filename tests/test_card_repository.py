@@ -2,12 +2,14 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from czech_vocab.repositories.card_repository import (
+from czech_vocab.repositories import (
+    AppSettingsRepository,
     CardCreate,
     CardRepository,
+    DeckRepository,
     ReviewLogRecord,
+    initialize_database,
 )
-from czech_vocab.repositories.schema import initialize_database
 from czech_vocab.web.app import create_app
 
 
@@ -28,7 +30,12 @@ def test_app_startup_bootstraps_sqlite_schema(tmp_path: Path) -> None:
             "SELECT name FROM sqlite_master WHERE type = 'table'",
         ).fetchall()
 
-    assert {"cards", "review_logs"} <= {name for (name,) in rows}
+    assert {"cards", "review_logs", "decks", "app_settings"} <= {name for (name,) in rows}
+    settings = AppSettingsRepository(database_path).get_settings()
+    default_deck = DeckRepository(database_path).get_default_deck()
+    assert settings.default_desired_retention == 0.90
+    assert settings.default_daily_new_limit == 20
+    assert default_deck.name == "Основная"
 
 
 def test_create_and_fetch_card_by_id_and_identity_key(tmp_path: Path) -> None:
@@ -163,6 +170,49 @@ def test_query_due_cards_and_search_cards(tmp_path: Path) -> None:
         due_later.id,
     ]
     assert [card.lemma for card in repository.search_cards("маш")] == ["auto"]
+
+
+def test_cards_can_share_identity_across_different_decks(tmp_path: Path) -> None:
+    repository = build_repository(tmp_path / "cards.sqlite3")
+    deck_repository = DeckRepository(tmp_path / "cards.sqlite3")
+    second_deck = deck_repository.create_deck(
+        name="Путешествия",
+        desired_retention=0.88,
+        daily_new_limit=12,
+    )
+
+    first_card = repository.create_card(
+        CardCreate(
+            identity_key="identity-shared",
+            lemma="kniha",
+            translation="книга",
+            notes="deck one",
+            metadata={},
+            fsrs_state={},
+            due_at=None,
+            last_review_at=None,
+        ),
+    )
+    second_card = repository.create_card(
+        CardCreate(
+            identity_key="identity-shared",
+            lemma="kniha",
+            translation="книга",
+            notes="deck two",
+            metadata={},
+            fsrs_state={},
+            due_at=None,
+            last_review_at=None,
+            deck_id=second_deck.id,
+        ),
+    )
+
+    assert first_card.deck_id != second_card.deck_id
+    assert repository.get_card_by_identity_key("identity-shared", deck_id=1) == first_card
+    assert (
+        repository.get_card_by_identity_key("identity-shared", deck_id=second_deck.id)
+        == second_card
+    )
 
 
 def build_repository(database_path: Path) -> CardRepository:

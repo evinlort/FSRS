@@ -2,10 +2,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from io import StringIO
 from pathlib import Path
+from typing import Iterable
 
 from czech_vocab.domain import FsrsScheduler
 from czech_vocab.importers import MissingRequiredHeadersError, parse_vocabulary_csv
 from czech_vocab.repositories import CardCreate, CardRepository, build_identity_key
+from czech_vocab.services.deck_settings_service import DeckSettingsService
 
 
 @dataclass(frozen=True)
@@ -19,6 +21,7 @@ class ImportSummary:
 class ImportService:
     def __init__(self, database_path: Path, *, scheduler: FsrsScheduler | None = None) -> None:
         self._repository = CardRepository(database_path)
+        self._deck_settings_service = DeckSettingsService(database_path)
         self._scheduler = scheduler or FsrsScheduler()
 
     def import_csv_bytes(
@@ -26,27 +29,36 @@ class ImportService:
         csv_bytes: bytes,
         *,
         imported_at: datetime | None = None,
+        deck_name: str | None = None,
     ) -> ImportSummary:
         try:
             csv_text = csv_bytes.decode("utf-8-sig")
         except UnicodeDecodeError:
             return ImportSummary(0, 0, 0, ["Unable to decode CSV as UTF-8."])
-        return self.import_csv_text(csv_text, imported_at=imported_at)
+        return self.import_csv_text(csv_text, imported_at=imported_at, deck_name=deck_name)
 
     def import_csv_text(
         self,
         csv_text: str,
         *,
         imported_at: datetime | None = None,
+        deck_name: str | None = None,
     ) -> ImportSummary:
         try:
             result = parse_vocabulary_csv(StringIO(csv_text))
         except MissingRequiredHeadersError as exc:
             return ImportSummary(0, 0, 0, [str(exc)])
         review_time = imported_at.astimezone(UTC) if imported_at else datetime.now(UTC)
-        return self._persist_rows(result.rows, result.row_errors, review_time)
+        deck = self._deck_settings_service.resolve_import_deck(deck_name)
+        return self._persist_rows(result.rows, result.row_errors, review_time, deck.id)
 
-    def _persist_rows(self, rows, row_errors, review_time: datetime) -> ImportSummary:
+    def _persist_rows(
+        self,
+        rows: Iterable,
+        row_errors,
+        review_time: datetime,
+        deck_id: int,
+    ) -> ImportSummary:
         created_count = 0
         updated_count = 0
         messages = [f"Line {error.line_number}: {error.message}" for error in row_errors]
@@ -55,6 +67,7 @@ class ImportService:
                 identity_key = build_identity_key(row.lemma, row.translation)
                 existing = self._repository.get_card_by_identity_key(
                     identity_key,
+                    deck_id=deck_id,
                     connection=connection,
                 )
                 if existing is not None:
@@ -78,6 +91,7 @@ class ImportService:
                         fsrs_state={},
                         due_at=None,
                         last_review_at=None,
+                        deck_id=deck_id,
                     ),
                     connection=connection,
                 )

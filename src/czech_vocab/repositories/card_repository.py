@@ -34,10 +34,11 @@ class CardRepository:
         self,
         identity_key: str,
         *,
+        deck_id: int = 1,
         connection: sqlite3.Connection | None = None,
     ) -> CardRecord | None:
-        query = "SELECT * FROM cards WHERE identity_key = ?"
-        return self._fetch_one(query, (identity_key,), connection=connection)
+        query = "SELECT * FROM cards WHERE deck_id = ? AND identity_key = ?"
+        return self._fetch_one(query, (deck_id, identity_key), connection=connection)
 
     def create_card(
         self,
@@ -47,6 +48,7 @@ class CardRepository:
     ) -> CardRecord:
         timestamp = utc_now()
         payload = (
+            card.deck_id,
             card.identity_key,
             card.lemma,
             card.translation,
@@ -62,6 +64,7 @@ class CardRepository:
             cursor = active_connection.execute(
                 """
                 INSERT INTO cards (
+                    deck_id,
                     identity_key,
                     lemma,
                     translation,
@@ -72,7 +75,7 @@ class CardRepository:
                     last_review_at,
                     created_at,
                     updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 payload,
             )
