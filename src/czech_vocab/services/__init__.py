@@ -13,6 +13,7 @@ from czech_vocab.services.card_edit_service import (
 from czech_vocab.services.dashboard_service import DashboardData, DashboardService
 from czech_vocab.services.deck_settings_service import DeckSettingsService
 from czech_vocab.services.import_service import ImportPreview, ImportResult, ImportService
+from czech_vocab.services.stats_service import StatsPageData, StatsService, StatsSummaryRow
 from czech_vocab.services.study_service import ReviewResult, StudyCard, StudyService
 
 __all__ = [
@@ -29,6 +30,9 @@ __all__ = [
     "ImportResult",
     "ImportService",
     "ReviewResult",
+    "StatsPageData",
+    "StatsService",
+    "StatsSummaryRow",
     "StudyCard",
     "StudyService",
 ]

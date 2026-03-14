@@ -24,6 +24,7 @@ from czech_vocab.services import (
     DashboardService,
     DeckSettingsService,
     ImportService,
+    StatsService,
     StudyService,
 )
 
@@ -197,11 +198,9 @@ def update_card_page(card_id: int):
 
 @main_bp.get("/stats")
 def stats_page() -> str:
-    return render_template(
-        "placeholder.html",
-        page_name="Статистика",
-        page_message="Раздел статистики будет добавлен на следующем UI-шаге.",
-    )
+    service = StatsService(current_app.config["DATABASE_PATH"])
+    stats = service.get_stats(now=datetime.now(UTC), deck=request.args.get("deck", "all"))
+    return render_template("stats.html", stats=stats)
 
 
 @main_bp.get("/settings")

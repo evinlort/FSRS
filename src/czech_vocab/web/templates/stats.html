@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Статистика{% endblock %}
+{% block page_eyebrow %}30 дней{% endblock %}
+{% block page_title %}Статистика за 30 дней{% endblock %}
+{% block page_intro %}
+  <p>Сводка по нагрузке и качеству повторений без детальных FSRS-параметров.</p>
+{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <form method="get" action="{{ url_for('main.stats_page') }}">
+      <label class="field-label" for="deck">Колода</label>
+      <select id="deck" name="deck">
+        {% for deck in stats.deck_options %}
+          <option value="{{ deck.value }}"{% if stats.selected_deck == deck.value %} selected{% endif %}>
+            {{ deck.label }}
+          </option>
+        {% endfor %}
+      </select>
+      <button class="button button--primary" type="submit">Показать статистику</button>
+    </form>
+  </section>
+
+  <section class="panel-grid">
+    <article class="panel">
+      <h2 class="panel__title">К повторению сегодня</h2>
+      <p>{{ stats.due_today }}</p>
+    </article>
+    <article class="panel">
+      <h2 class="panel__title">Повторено сегодня</h2>
+      <p>{{ stats.reviewed_today }}</p>
+    </article>
+    <article class="panel">
+      <h2 class="panel__title">Успешных ответов</h2>
+      <p>{{ stats.success_rate }}</p>
+    </article>
+    <article class="panel">
+      <h2 class="panel__title">Сложных ответов</h2>
+      <p>{{ stats.fail_rate }}</p>
+    </article>
+    <article class="panel">
+      <h2 class="panel__title">Текущее retention</h2>
+      <p>{{ stats.desired_retention_text }}</p>
+    </article>
+    <article class="panel">
+      <h2 class="panel__title">Средний интервал</h2>
+      <p>{{ stats.average_interval_text }}</p>
+    </article>
+  </section>
+
+  <section class="panel">
+    <h2 class="panel__title">Активность по дням</h2>
+    {% if stats.has_history %}
+      <ul class="summary-list">
+        {% for row in stats.summary_rows %}
+          <li>
+            <strong>{{ row.date_text }}</strong>
+            <span>Всего: {{ row.reviewed_count }}</span>
+            <span>Успех: {{ row.success_count }}</span>
+            <span>Сложно: {{ row.fail_count }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>Пока недостаточно истории повторений за последние 30 дней.</p>
+      <div class="action-row">
+        <a class="button button--primary" href="{{ url_for('main.review_page') }}">Перейти к повторению</a>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}
