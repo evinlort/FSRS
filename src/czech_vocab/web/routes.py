@@ -34,7 +34,8 @@ def import_csv() -> str:
 @main_bp.get("/review")
 def review_page() -> str:
     service = StudyService(current_app.config["DATABASE_PATH"])
-    review_card = service.get_next_due_card(now=datetime.now(UTC))
+    deck_id = _parse_page(request.args.get("deck", "")) if request.args.get("deck") else None
+    review_card = service.get_next_due_card(now=datetime.now(UTC), deck_id=deck_id)
     return render_template("review.html", review_card=review_card)
 
 

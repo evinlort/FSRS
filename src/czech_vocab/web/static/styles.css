@@ -118,6 +118,7 @@ a {
 .nav-toggle,
 input[type="file"],
 input[type="text"],
+select,
 input:not([type]),
 button {
   font: inherit;
@@ -217,6 +218,7 @@ button {
 
 input[type="file"],
 input[type="text"],
+select,
 input:not([type]) {
   width: 100%;
   max-width: 28rem;
@@ -225,6 +227,30 @@ input:not([type]) {
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--surface);
+}
+
+.dashboard-review-form > * + * {
+  margin-top: 0.8rem;
+}
+
+.summary-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.summary-list li {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.75rem 0;
+}
+
+.summary-list li + li {
+  border-top: 1px solid var(--border);
+}
+
+.summary-list span {
+  color: var(--muted);
 }
 
 .card-list {

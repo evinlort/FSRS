@@ -4,32 +4,89 @@
 {% block page_eyebrow %}Панель{% endblock %}
 {% block page_title %}Главная{% endblock %}
 {% block page_intro %}
-  <p>Импортируйте словарь, повторяйте карточки и просматривайте каталог в одном приложении.</p>
-{% endblock %}
-{% block page_actions %}
-  <a class="button button--primary" href="{{ url_for('main.review_page') }}">Начать повторение</a>
+  <p>Выберите колоду, проверьте нагрузку на сегодня и переходите к повторению без лишних шагов.</p>
 {% endblock %}
 
 {% block content %}
-  <section class="panel-grid">
-    <article class="panel">
-      <h2 class="panel__title">Карточки</h2>
-      <p>Всего карточек: {{ dashboard.total_cards }}</p>
-    </article>
-    <article class="panel panel--accent">
-      <h2 class="panel__title">Повторение</h2>
-      <p>К повторению: {{ dashboard.due_cards }}</p>
-    </article>
+  {% if dashboard.total_cards == 0 %}
+    <section class="panel panel--accent">
+      <h2 class="panel__title">Начать работу</h2>
+      <p>Пока нет карточек. Сначала импортируйте слова, чтобы появилась колода для повторения.</p>
+      <div class="action-row">
+        <a class="button button--primary" href="{{ url_for('main.import_page') }}">Импортировать слова</a>
+      </div>
+    </section>
+  {% else %}
+    <section class="panel panel--accent">
+      <h2 class="panel__title">Начать повторение</h2>
+      <form class="dashboard-review-form" method="get" action="{{ url_for('main.review_page') }}">
+        <label class="field-label" for="deck">Колода</label>
+        <select id="deck" name="deck">
+          {% for deck in dashboard.deck_summaries %}
+            {% if deck.total_cards > 0 %}
+              <option value="{{ deck.deck_id }}"{% if deck.deck_id == dashboard.selected_deck_id %} selected{% endif %}>
+                {{ deck.name }} · {{ deck.total_cards }} карточек
+              </option>
+            {% endif %}
+          {% endfor %}
+        </select>
+        <button class="button button--primary" type="submit">Начать повторение</button>
+      </form>
+    </section>
+  {% endif %}
+
+  <section class="panel">
+    <h2 class="panel__title">К повторению сегодня</h2>
+    <p>Всего карточек: {{ dashboard.total_cards }}</p>
+    <p>К повторению сегодня: {{ dashboard.due_cards }}</p>
   </section>
 
-  <section class="panel-stack">
-    <article class="panel">
-      <h2 class="panel__title">Следующие шаги</h2>
-      <p>Сначала импортируйте словарь, затем повторяйте карточки и проверяйте каталог.</p>
-      <div class="action-row">
-        <a class="button" href="{{ url_for('main.import_page') }}">Открыть импорт</a>
-        <a class="button" href="{{ url_for('main.cards_page') }}">Открыть карточки</a>
-      </div>
-    </article>
+  <section class="panel">
+    <h2 class="panel__title">Колоды</h2>
+    {% if dashboard.deck_summaries %}
+      <ul class="summary-list">
+        {% for deck in dashboard.deck_summaries %}
+          <li>
+            <strong>{{ deck.name }}</strong>
+            <span>{{ deck.total_cards }} карточек</span>
+            <span>{{ deck.due_cards }} к повторению</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <h2 class="panel__title">Недавняя активность</h2>
+    {% if dashboard.recent_reviews %}
+      <ul class="summary-list">
+        {% for review in dashboard.recent_reviews %}
+          <li>
+            <strong>{{ review.lemma }}</strong>
+            <span>{{ review.rating }}</span>
+            <span>{{ review.deck_name }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>Пока нет завершённых повторений.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <h2 class="panel__title">Импорт словаря</h2>
+    <p>Добавьте новые слова в существующую колоду или начните с пустой базы.</p>
+    <div class="action-row">
+      <a class="button" href="{{ url_for('main.import_page') }}">Открыть импорт</a>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2 class="panel__title">Статистика по обучению</h2>
+    <p>Быстрая сводка по повторам будет доступна на следующем шаге.</p>
+    <div class="action-row">
+      <a class="button" href="{{ url_for('main.stats_page') }}">Открыть статистику</a>
+      <a class="button" href="{{ url_for('main.cards_page') }}">Открыть карточки</a>
+    </div>
   </section>
 {% endblock %}
