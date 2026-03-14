@@ -185,6 +185,81 @@ class CardRepository:
             for row in rows
         ]
 
+    def count_cards_in_deck(self, deck_id: int) -> int:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT COUNT(*) FROM cards WHERE deck_id = ?",
+                (deck_id,),
+            ).fetchone()
+        return row[0]
+
+    def count_new_cards_reviewed_on_day(
+        self,
+        *,
+        deck_id: int,
+        day_start: datetime,
+        day_end: datetime,
+    ) -> int:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT COUNT(*)
+                FROM (
+                    SELECT cards.id
+                    FROM cards
+                    JOIN review_logs ON review_logs.card_id = cards.id
+                    WHERE cards.deck_id = ?
+                    GROUP BY cards.id
+                    HAVING MIN(review_logs.reviewed_at) >= ?
+                       AND MIN(review_logs.reviewed_at) < ?
+                )
+                """,
+                (
+                    deck_id,
+                    serialize_datetime(day_start),
+                    serialize_datetime(day_end),
+                ),
+            ).fetchone()
+        return row[0]
+
+    def query_due_learned_cards(self, *, deck_id: int, now: datetime) -> list[CardRecord]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT cards.*
+                FROM cards
+                WHERE cards.deck_id = ?
+                  AND cards.due_at IS NOT NULL
+                  AND cards.due_at <= ?
+                  AND EXISTS (
+                      SELECT 1
+                      FROM review_logs
+                      WHERE review_logs.card_id = cards.id
+                  )
+                ORDER BY cards.due_at, cards.id
+                """,
+                (deck_id, serialize_datetime(now)),
+            ).fetchall()
+        return [row_to_card(row) for row in rows]
+
+    def query_new_cards(self, *, deck_id: int) -> list[CardRecord]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT cards.*
+                FROM cards
+                WHERE cards.deck_id = ?
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM review_logs
+                      WHERE review_logs.card_id = cards.id
+                  )
+                ORDER BY cards.id
+                """,
+                (deck_id,),
+            ).fetchall()
+        return [row_to_card(row) for row in rows]
+
     def query_due_cards(self, now: datetime) -> list[CardRecord]:
         with self._connect() as connection:
             rows = connection.execute(
