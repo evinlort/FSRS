@@ -172,6 +172,28 @@ button {
   box-shadow: var(--shadow);
 }
 
+.state-panel {
+  padding: 1rem;
+  border-radius: 14px;
+}
+
+.state-panel__title {
+  margin: 0 0 0.5rem;
+}
+
+.state-panel--empty {
+  background: rgba(44, 107, 82, 0.08);
+}
+
+.state-panel--error {
+  background: rgba(139, 45, 31, 0.08);
+}
+
+.state-panel--warning {
+  margin: 1rem 0;
+  background: rgba(180, 125, 34, 0.12);
+}
+
 .panel + .panel,
 .panel + .panel-stack,
 .panel-grid + .panel-stack,
@@ -208,6 +230,12 @@ button {
   background: var(--surface);
   color: var(--ink);
   cursor: pointer;
+}
+
+.button[disabled],
+button[disabled] {
+  cursor: wait;
+  opacity: 0.72;
 }
 
 .field-label {
@@ -279,7 +307,8 @@ input:not([type]) {
 }
 
 .review-grades .button {
-  min-width: 6rem;
+  width: 100%;
+  min-width: 0;
 }
 
 .catalog-filters > * + * {
@@ -349,6 +378,12 @@ form > .settings-panel + .action-row {
   margin: 0 0 0.75rem;
 }
 
+.review-grades {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
 :focus-visible {
   outline: 3px solid rgba(44, 107, 82, 0.45);
   outline-offset: 3px;
@@ -372,5 +407,9 @@ form > .settings-panel + .action-row {
 
   .settings-decks {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .review-grades {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }

@@ -9,11 +9,14 @@ def test_get_import_page_renders_upload_form_and_deck_controls(client) -> None:
 
     assert response.status_code == 200
     page = response.get_data(as_text=True)
-    assert '<form method="post" enctype="multipart/form-data" action="/import/preview"' in page
+    assert 'action="/import/preview"' in page
+    assert 'enctype="multipart/form-data"' in page
     assert 'type="file"' in page
     assert 'name="csv_file"' in page
     assert 'name="deck_id"' in page
     assert 'name="new_deck_name"' in page
+    assert "data-busy-form" in page
+    assert 'data-busy-label="Готовим предпросмотр..."' in page
 
 
 def test_preview_valid_csv_without_committing_and_confirm_import(client, app) -> None:
@@ -87,6 +90,7 @@ def test_duplicate_preview_and_confirm_skip_existing_card_without_updating(clien
 
     preview_page = preview_response.get_data(as_text=True)
     assert "Дубликаты будут пропущены: 1" in preview_page
+    assert "Найдены дубликаты" in preview_page
     assert count_cards(app.config["DATABASE_PATH"]) == 1
 
     confirm_response = client.post(
@@ -99,6 +103,7 @@ def test_duplicate_preview_and_confirm_skip_existing_card_without_updating(clien
     page = confirm_response.get_data(as_text=True)
     assert "Добавлено карточек: 0" in page
     assert "Пропущено дубликатов: 1" in page
+    assert "Новые карточки не добавлены" in page
     assert count_cards(app.config["DATABASE_PATH"]) == 1
     updated = fetch_card(app.config["DATABASE_PATH"], "kniha", "книга")
     assert updated is not None
@@ -137,6 +142,7 @@ def test_missing_required_headers_block_confirmation_without_partial_writes(clie
     page = response.get_data(as_text=True)
     assert "Не удалось распознать обязательные заголовки CSV." in page
     assert "Missing required headers: czech, russian" in page
+    assert "Выбрать другой файл" in page
     assert 'action="/import/confirm"' not in page
     assert count_cards(app.config["DATABASE_PATH"]) == 0
 

@@ -11,6 +11,7 @@ def test_home_page_renders_russian_shell_navigation(client) -> None:
     assert '<html lang="ru">' in page
     assert "<title>Главная" in page
     assert 'href="/static/styles.css"' in page
+    assert 'href="/static/favicon.svg"' in page
     assert 'src="/static/app.js"' in page
     assert 'href="#main-content"' in page
     assert 'aria-controls="primary-nav"' in page
@@ -21,6 +22,13 @@ def test_home_page_renders_russian_shell_navigation(client) -> None:
     assert 'href="/stats"' in page
     assert 'href="/settings"' in page
     assert "Повторение" in page
+
+
+def test_favicon_route_redirects_to_static_asset(client) -> None:
+    response = client.get("/favicon.ico")
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/static/favicon.svg")
 
 
 def test_existing_pages_render_page_titles_inside_shared_layout(client) -> None:

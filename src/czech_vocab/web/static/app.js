@@ -2,6 +2,7 @@ const navToggle = document.querySelector("[data-nav-toggle]");
 const nav = document.querySelector("[data-nav]");
 const reviewRoot = document.querySelector("[data-review-root]");
 const catalogSearchInput = document.querySelector("[data-search-input]");
+const busyForms = document.querySelectorAll("[data-busy-form]");
 
 if (navToggle && nav) {
   navToggle.addEventListener("click", () => {
@@ -71,3 +72,25 @@ if (reviewRoot) {
     button.click();
   });
 }
+
+busyForms.forEach((form) => {
+  form.addEventListener("submit", (event) => {
+    if (form.dataset.busy === "true") {
+      event.preventDefault();
+      return;
+    }
+    form.dataset.busy = "true";
+    form.setAttribute("aria-busy", "true");
+    const submitter = event.submitter;
+    const controls = form.querySelectorAll("button, input[type='submit']");
+    controls.forEach((control) => {
+      if (control === submitter) {
+        return;
+      }
+      control.disabled = true;
+    });
+    if (submitter?.dataset.busyLabel) {
+      submitter.textContent = submitter.dataset.busyLabel;
+    }
+  });
+});

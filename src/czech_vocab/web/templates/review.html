@@ -10,9 +10,16 @@
 {% block content %}
   <section class="panel review-panel" data-review-root>
     {% if undo_available %}
-      <form class="review-undo" method="post" action="{{ url_for('main.undo_review') }}">
+      <form
+        class="review-undo"
+        method="post"
+        action="{{ url_for('main.undo_review') }}"
+        data-busy-form
+      >
         <input type="hidden" name="deck" value="{{ review_deck.id }}">
-        <button class="button" type="submit">Отменить последний ответ</button>
+        <button class="button" type="submit" data-busy-label="Отменяем...">
+          Отменить последний ответ
+        </button>
       </form>
     {% endif %}
     {% if review_card %}
@@ -45,23 +52,64 @@
           action="{{ url_for('main.submit_review', card_id=review_card.card_id) }}"
           hidden
           data-review-grade-panel
+          data-busy-form
         >
           <input type="hidden" name="deck" value="{{ review_deck.id }}">
-          <button class="button" type="submit" name="rating" value="Again" data-rating-key="1">Again</button>
-          <button class="button" type="submit" name="rating" value="Hard" data-rating-key="2">Hard</button>
-          <button class="button button--primary" type="submit" name="rating" value="Good" data-rating-key="3">Good</button>
-          <button class="button" type="submit" name="rating" value="Easy" data-rating-key="4">Easy</button>
+          <button
+            class="button"
+            type="submit"
+            name="rating"
+            value="Again"
+            data-rating-key="1"
+            data-busy-label="Сохраняем..."
+          >Again</button>
+          <button
+            class="button"
+            type="submit"
+            name="rating"
+            value="Hard"
+            data-rating-key="2"
+            data-busy-label="Сохраняем..."
+          >Hard</button>
+          <button
+            class="button button--primary"
+            type="submit"
+            name="rating"
+            value="Good"
+            data-rating-key="3"
+            data-busy-label="Сохраняем..."
+          >Good</button>
+          <button
+            class="button"
+            type="submit"
+            name="rating"
+            value="Easy"
+            data-rating-key="4"
+            data-busy-label="Сохраняем..."
+          >Easy</button>
         </form>
       </article>
     {% else %}
-      <p>{{ review_empty_reason | review_empty_message(review_deck.name) }}</p>
-      <div class="action-row">
-        {% if review_empty_reason == "no_cards" %}
+      {% if review_empty_reason == "no_cards" %}
+        <div class="state-panel state-panel--empty">
+          <h2 class="state-panel__title">Колода пуста</h2>
+          <p>{{ review_empty_reason | review_empty_message(review_deck.name) }}</p>
+          <div class="action-row">
           <a class="button button--primary" href="{{ url_for('main.import_page') }}">Импортировать слова</a>
-        {% else %}
-          <a class="button" href="{{ url_for('main.home') }}">Вернуться на главную</a>
-        {% endif %}
-      </div>
+          </div>
+        </div>
+      {% else %}
+        <div class="state-panel state-panel--empty">
+          <h2 class="state-panel__title">На сегодня всё</h2>
+          <p>{{ review_empty_reason | review_empty_message(review_deck.name) }}</p>
+          <div class="action-row">
+            <a class="button button--primary" href="{{ url_for('main.cards_page', deck=review_deck.id) }}">
+              Открыть карточки колоды
+            </a>
+            <a class="button" href="{{ url_for('main.home') }}">Вернуться на главную</a>
+          </div>
+        </div>
+      {% endif %}
     {% endif %}
   </section>
 {% endblock %}

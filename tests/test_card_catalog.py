@@ -128,7 +128,7 @@ def test_cards_page_paginates_and_preserves_all_filters(client, app) -> None:
 def test_cards_page_distinguishes_empty_catalog_from_no_matches(client, app) -> None:
     empty_response = client.get("/cards")
 
-    assert "Пока нет карточек" in empty_response.get_data(as_text=True)
+    assert "Карточек пока нет" in empty_response.get_data(as_text=True)
     assert 'href="/import"' in empty_response.get_data(as_text=True)
 
     now = datetime(2026, 3, 14, 12, 0, tzinfo=UTC)
@@ -136,7 +136,7 @@ def test_cards_page_distinguishes_empty_catalog_from_no_matches(client, app) -> 
     no_match_response = client.get("/cards?deck=1&q=xyz&search_in=czech")
     no_match_page = no_match_response.get_data(as_text=True)
 
-    assert "Ничего не найдено по текущим фильтрам." in no_match_page
+    assert "Совпадений не найдено" in no_match_page
     assert 'href="/cards?deck=1&amp;status=all&amp;search_in=czech"' in no_match_page
 
 

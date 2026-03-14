@@ -80,12 +80,18 @@
         {% endfor %}
       </ul>
     {% elif catalog_page.is_empty_catalog %}
-      <p>Пока нет карточек. Начните с импорта словаря.</p>
+      <div class="state-panel state-panel--empty">
+        <h2 class="state-panel__title">Карточек пока нет</h2>
+        <p>Начните с импорта словаря, чтобы появились карточки для поиска и редактирования.</p>
+      </div>
       <div class="action-row">
         <a class="button button--primary" href="{{ url_for('main.import_page') }}">Импортировать слова</a>
       </div>
     {% else %}
-      <p>Ничего не найдено по текущим фильтрам.</p>
+      <div class="state-panel state-panel--empty">
+        <h2 class="state-panel__title">Совпадений не найдено</h2>
+        <p>Измените фильтры или сбросьте поиск, чтобы снова увидеть карточки.</p>
+      </div>
       <div class="action-row">
         <a
           class="button"

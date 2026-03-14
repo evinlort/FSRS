@@ -40,6 +40,11 @@ def home() -> str:
     return render_template("home.html", dashboard=dashboard)
 
 
+@main_bp.get("/favicon.ico")
+def favicon():
+    return redirect(url_for("static", filename="favicon.svg"))
+
+
 @main_bp.get("/import")
 def import_page() -> str:
     return _render_import_page()

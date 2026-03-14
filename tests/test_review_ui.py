@@ -27,6 +27,8 @@ def test_review_page_renders_prompt_first_with_hidden_answer_and_grades(client, 
     assert "data-review-grade-panel" in page
     assert "review-grades" in page
     assert "hidden" in page
+    assert "data-busy-form" in page
+    assert 'data-busy-label="Сохраняем..."' in page
     assert "книга" in page
     assert "common noun" in page
     assert "level" in page
@@ -43,6 +45,27 @@ def test_review_page_shows_contextual_empty_state_when_no_cards_are_available(cl
     page = response.get_data(as_text=True)
     assert "В колоде «Основная» пока нет карточек." in page
     assert 'href="/import"' in page
+
+
+def test_review_page_shows_distinct_no_due_state_with_catalog_link(client, app) -> None:
+    due_at = datetime(2026, 3, 16, 12, 0, tzinfo=UTC)
+    create_due_card(
+        app.config["DATABASE_PATH"],
+        lemma="okno",
+        translation="окно",
+        notes="window",
+        metadata={},
+        due_at=due_at,
+        learned=True,
+    )
+
+    response = client.get("/review?deck=1")
+
+    assert response.status_code == 200
+    page = response.get_data(as_text=True)
+    assert "На сегодня всё" in page
+    assert "Сейчас нет карточек для повторения в этой колоде." in page
+    assert 'href="/cards?deck=1"' in page
 
 
 def test_review_page_uses_selected_deck_context(client, app) -> None:
@@ -185,6 +208,7 @@ def create_due_card(
     metadata: dict,
     due_at,
     deck_id: int = 1,
+    learned: bool = False,
 ):
     repository = CardRepository(database_path)
     scheduler = FsrsScheduler(enable_fuzzing=False)
@@ -210,6 +234,19 @@ def create_due_card(
         due_at=restored.due,
         last_review_at=restored.last_review,
     )
+    if learned:
+        repository.insert_review_log(
+            card_id=created.id,
+            rating="Good",
+            reviewed_at=due_at,
+            review_duration_seconds=12,
+        )
+        repository.update_schedule_state(
+            card_id=created.id,
+            fsrs_state=state,
+            due_at=due_at,
+            last_review_at=due_at,
+        )
     updated = repository.get_card_by_id(created.id)
     assert updated is not None
     return updated
