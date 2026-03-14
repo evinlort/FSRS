@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section>
+    <h2>Cards</h2>
+    <form method="get" action="/cards">
+      <label for="q">Search</label>
+      <input id="q" name="q" value="{{ catalog_page.query }}">
+      <button type="submit">Find</button>
+    </form>
+  </section>
+
+  <section>
+    {% if catalog_page.cards %}
+      <ul>
+        {% for card in catalog_page.cards %}
+          <li>
+            <h3>{{ card.lemma }}</h3>
+            <p><strong>Russian:</strong> {{ card.translation }}</p>
+            {% if card.notes %}
+              <p><strong>Notes:</strong> {{ card.notes }}</p>
+            {% endif %}
+            <p>Due: {{ card.due_text }}</p>
+            <p>State: {{ card.state_text }}</p>
+            {% if card.metadata %}
+              <dl>
+                {% for key, value in card.metadata.items() %}
+                  <dt>{{ key }}</dt>
+                  <dd>{{ value }}</dd>
+                {% endfor %}
+              </dl>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No cards matched your search.</p>
+    {% endif %}
+  </section>
+
+  <nav aria-label="Pagination">
+    {% if catalog_page.has_previous %}
+      <a href="{{ url_for('main.cards_page', q=catalog_page.query, page=catalog_page.page - 1) }}">Previous</a>
+    {% endif %}
+    {% if catalog_page.has_next %}
+      <a href="{{ url_for('main.cards_page', q=catalog_page.query, page=catalog_page.page + 1) }}">Next</a>
+    {% endif %}
+  </nav>
+{% endblock %}

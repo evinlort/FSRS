@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 from flask import Blueprint, current_app, redirect, render_template, request, url_for
 
-from czech_vocab.services import ImportService, StudyService
+from czech_vocab.services import CardCatalogService, ImportService, StudyService
 
 main_bp = Blueprint("main", __name__)
 
@@ -51,3 +51,19 @@ def submit_review(card_id: int):
     except LookupError as exc:
         return str(exc), 404
     return redirect(url_for("main.review_page"))
+
+
+@main_bp.get("/cards")
+def cards_page() -> str:
+    service = CardCatalogService(current_app.config["DATABASE_PATH"])
+    query = request.args.get("q", "")
+    page = _parse_page(request.args.get("page", "1"))
+    catalog_page = service.get_page(query=query, page=page)
+    return render_template("cards.html", catalog_page=catalog_page)
+
+
+def _parse_page(raw_page: str) -> int:
+    try:
+        return int(raw_page)
+    except ValueError:
+        return 1
