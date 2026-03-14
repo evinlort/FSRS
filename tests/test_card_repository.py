@@ -30,7 +30,9 @@ def test_app_startup_bootstraps_sqlite_schema(tmp_path: Path) -> None:
             "SELECT name FROM sqlite_master WHERE type = 'table'",
         ).fetchall()
 
-    assert {"cards", "review_logs", "decks", "app_settings"} <= {name for (name,) in rows}
+    assert {"cards", "review_logs", "decks", "app_settings", "import_previews"} <= {
+        name for (name,) in rows
+    }
     settings = AppSettingsRepository(database_path).get_settings()
     default_deck = DeckRepository(database_path).get_default_deck()
     assert settings.default_desired_retention == 0.90

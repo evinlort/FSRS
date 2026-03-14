@@ -4,27 +4,88 @@
 {% block page_eyebrow %}CSV{% endblock %}
 {% block page_title %}Импорт словаря{% endblock %}
 {% block page_intro %}
-  <p>Загрузите CSV-файл с чешскими словами и русскими переводами.</p>
+  <p>Загрузите CSV-файл, проверьте предпросмотр и подтвердите импорт в выбранную колоду.</p>
 {% endblock %}
 
 {% block content %}
   <section class="panel">
-    <form method="post" enctype="multipart/form-data">
+    <form method="post" enctype="multipart/form-data" action="{{ url_for('main.preview_import') }}">
       <label class="field-label" for="csv_file">CSV-файл</label>
-      <input id="csv_file" type="file" name="csv_file" accept=".csv,text/csv">
-      <button class="button button--primary" type="submit">Импортировать CSV</button>
+      <input id="csv_file" type="file" name="csv_file" accept=".csv,text/csv" required>
+
+      <label class="field-label" for="deck_id">Существующая колода</label>
+      <select id="deck_id" name="deck_id">
+        {% for deck in decks %}
+          <option value="{{ deck.id }}"{% if form_state.deck_id == deck.id %} selected{% endif %}>
+            {{ deck.name }}
+          </option>
+        {% endfor %}
+      </select>
+
+      <label class="field-label" for="new_deck_name">Или создайте новую колоду</label>
+      <input id="new_deck_name" type="text" name="new_deck_name" value="{{ form_state.new_deck_name }}">
+
+      <button class="button button--primary" type="submit">Показать предпросмотр</button>
     </form>
   </section>
 
-  {% if summary %}
+  {% if error_title %}
     <section class="panel">
-      <h2 class="panel__title">Итоги импорта</h2>
-      <p>Создано: {{ summary.created_count }}</p>
-      <p>Обновлено: {{ summary.updated_count }}</p>
-      <p>Отклонено: {{ summary.rejected_count }}</p>
-      {% if summary.messages %}
+      <h2 class="panel__title">{{ error_title }}</h2>
+      <p>{{ error_message }}</p>
+      {% if error_details %}
         <ul>
-          {% for message in summary.messages %}
+          {% for detail in error_details %}
+            <li>{{ detail }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </section>
+  {% endif %}
+
+  {% if preview %}
+    <section class="panel">
+      <h2 class="panel__title">Предпросмотр импорта</h2>
+      <p>Целевая колода: {{ preview.target_deck_name }}</p>
+      <p>Готово к импорту: {{ preview.ready_count }}</p>
+      <p>Дубликаты будут пропущены: {{ preview.duplicate_count }}</p>
+      <p>Отклонено строк: {{ preview.rejected_count }}</p>
+      {% if preview.rejected_messages %}
+        <ul>
+          {% for message in preview.rejected_messages %}
+            <li>{{ message }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      {% if preview.sample_rows %}
+        <ol class="summary-list">
+          {% for row in preview.sample_rows %}
+            <li>
+              <strong>{{ row.lemma }}</strong>
+              <span>{{ row.translation }}</span>
+            </li>
+          {% endfor %}
+        </ol>
+      {% endif %}
+      {% if preview.token %}
+        <form method="post" action="{{ url_for('main.confirm_import') }}">
+          <input type="hidden" name="preview_token" value="{{ preview.token }}">
+          <button class="button button--primary" type="submit">Подтвердить импорт</button>
+        </form>
+      {% endif %}
+    </section>
+  {% endif %}
+
+  {% if result %}
+    <section class="panel">
+      <h2 class="panel__title">Импорт завершён</h2>
+      <p>Целевая колода: {{ result.target_deck_name }}</p>
+      <p>Добавлено карточек: {{ result.imported_count }}</p>
+      <p>Пропущено дубликатов: {{ result.duplicate_count }}</p>
+      <p>Отклонено строк: {{ result.rejected_count }}</p>
+      {% if result.rejected_messages %}
+        <ul>
+          {% for message in result.rejected_messages %}
             <li>{{ message }}</li>
           {% endfor %}
         </ul>

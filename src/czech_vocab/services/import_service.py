@@ -2,85 +2,142 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from io import StringIO
 from pathlib import Path
-from typing import Iterable
 
 from czech_vocab.domain import FsrsScheduler
-from czech_vocab.importers import MissingRequiredHeadersError, parse_vocabulary_csv
-from czech_vocab.repositories import CardCreate, CardRepository, build_identity_key
+from czech_vocab.importers import MissingRequiredHeadersError, ParsedCsvRow, parse_vocabulary_csv
+from czech_vocab.repositories import (
+    CardCreate,
+    CardRepository,
+    DeckRepository,
+    ImportPreviewRepository,
+    build_identity_key,
+)
 from czech_vocab.services.deck_settings_service import DeckSettingsService
 
 
 @dataclass(frozen=True)
-class ImportSummary:
-    created_count: int
-    updated_count: int
+class ImportPreview:
+    token: str | None
+    target_deck_name: str
+    ready_count: int
+    duplicate_count: int
     rejected_count: int
-    messages: list[str]
+    rejected_messages: list[str]
+    sample_rows: list[ParsedCsvRow]
+    error_message: str | None = None
+
+
+@dataclass(frozen=True)
+class ImportResult:
+    imported_count: int
+    duplicate_count: int
+    rejected_count: int
+    target_deck_name: str
+    rejected_messages: list[str]
 
 
 class ImportService:
     def __init__(self, database_path: Path, *, scheduler: FsrsScheduler | None = None) -> None:
         self._repository = CardRepository(database_path)
+        self._deck_repository = DeckRepository(database_path)
         self._deck_settings_service = DeckSettingsService(database_path)
+        self._preview_repository = ImportPreviewRepository(database_path)
         self._scheduler = scheduler or FsrsScheduler()
 
-    def import_csv_bytes(
+    def create_preview_from_bytes(
         self,
         csv_bytes: bytes,
         *,
+        deck_name: str,
         imported_at: datetime | None = None,
-        deck_name: str | None = None,
-    ) -> ImportSummary:
+    ) -> ImportPreview:
         try:
             csv_text = csv_bytes.decode("utf-8-sig")
         except UnicodeDecodeError:
-            return ImportSummary(0, 0, 0, ["Unable to decode CSV as UTF-8."])
-        return self.import_csv_text(csv_text, imported_at=imported_at, deck_name=deck_name)
+            return _error_preview(deck_name, "Unable to decode CSV as UTF-8.")
+        return self.create_preview_from_text(
+            csv_text,
+            imported_at=imported_at,
+            deck_name=deck_name,
+        )
 
-    def import_csv_text(
+    def create_preview_from_text(
         self,
         csv_text: str,
         *,
         imported_at: datetime | None = None,
-        deck_name: str | None = None,
-    ) -> ImportSummary:
+        deck_name: str,
+    ) -> ImportPreview:
         try:
-            result = parse_vocabulary_csv(StringIO(csv_text))
+            parsed = parse_vocabulary_csv(StringIO(csv_text))
         except MissingRequiredHeadersError as exc:
-            return ImportSummary(0, 0, 0, [str(exc)])
+            return _error_preview(deck_name, str(exc))
         review_time = imported_at.astimezone(UTC) if imported_at else datetime.now(UTC)
-        deck = self._deck_settings_service.resolve_import_deck(deck_name)
-        return self._persist_rows(result.rows, result.row_errors, review_time, deck.id)
+        ready_rows, duplicate_count = self._split_ready_rows(parsed.rows, deck_name=deck_name)
+        rejected_messages = [
+            f"Line {error.line_number}: {error.message}" for error in parsed.row_errors
+        ]
+        token = None
+        if parsed.rows:
+            record = self._preview_repository.create_preview(
+                deck_name=deck_name,
+                rows=[_row_payload(row) for row in parsed.rows],
+                rejected_messages=rejected_messages,
+                duplicate_count=duplicate_count,
+                imported_at=review_time,
+            )
+            token = record.token
+        return ImportPreview(
+            token=token,
+            target_deck_name=deck_name,
+            ready_count=len(ready_rows),
+            duplicate_count=duplicate_count,
+            rejected_count=len(rejected_messages),
+            rejected_messages=rejected_messages,
+            sample_rows=ready_rows[:5],
+        )
+
+    def confirm_preview(self, preview_token: str) -> ImportResult:
+        preview = self._preview_repository.get_preview(preview_token)
+        if preview is None:
+            raise LookupError("Preview not found")
+        rows = [_stored_row_to_parsed(item) for item in preview.rows]
+        ready_rows, duplicate_count = self._split_ready_rows(rows, deck_name=preview.deck_name)
+        deck = self._deck_settings_service.resolve_import_deck(preview.deck_name)
+        imported_count = self._persist_rows(
+            ready_rows,
+            review_time=preview.imported_at,
+            deck_id=deck.id,
+        )
+        self._preview_repository.delete_preview(preview_token)
+        return ImportResult(
+            imported_count=imported_count,
+            duplicate_count=duplicate_count,
+            rejected_count=len(preview.rejected_messages),
+            target_deck_name=preview.deck_name,
+            rejected_messages=preview.rejected_messages,
+        )
+
+    def resolve_target_deck_name(self, *, deck_id: int | None, new_deck_name: str | None) -> str:
+        if new_deck_name and new_deck_name.strip():
+            return new_deck_name.strip()
+        if deck_id is not None:
+            selected = self._deck_repository.get_deck_by_id(deck_id)
+            if selected is not None:
+                return selected.name
+        return self._deck_settings_service.get_default_deck().name
 
     def _persist_rows(
         self,
-        rows: Iterable,
-        row_errors,
+        rows: list[ParsedCsvRow],
+        *,
         review_time: datetime,
         deck_id: int,
-    ) -> ImportSummary:
-        created_count = 0
-        updated_count = 0
-        messages = [f"Line {error.line_number}: {error.message}" for error in row_errors]
+    ) -> int:
+        imported_count = 0
         with self._repository.connect() as connection:
             for row in rows:
                 identity_key = build_identity_key(row.lemma, row.translation)
-                existing = self._repository.get_card_by_identity_key(
-                    identity_key,
-                    deck_id=deck_id,
-                    connection=connection,
-                )
-                if existing is not None:
-                    self._repository.update_imported_content(
-                        card_id=existing.id,
-                        lemma=row.lemma,
-                        translation=row.translation,
-                        notes=row.notes,
-                        metadata=row.metadata,
-                        connection=connection,
-                    )
-                    updated_count += 1
-                    continue
                 created_card = self._repository.create_card(
                     CardCreate(
                         identity_key=identity_key,
@@ -107,10 +164,64 @@ class ImportService:
                     last_review_at=scheduled_card.last_review,
                     connection=connection,
                 )
-                created_count += 1
-        return ImportSummary(
-            created_count=created_count,
-            updated_count=updated_count,
-            rejected_count=len(row_errors),
-            messages=messages,
-        )
+                imported_count += 1
+        return imported_count
+
+    def _split_ready_rows(
+        self,
+        rows: list[ParsedCsvRow],
+        *,
+        deck_name: str,
+    ) -> tuple[list[ParsedCsvRow], int]:
+        deck = self._deck_repository.get_deck_by_name(deck_name)
+        deck_id = deck.id if deck is not None else None
+        seen_keys: set[str] = set()
+        ready_rows: list[ParsedCsvRow] = []
+        duplicate_count = 0
+        for row in rows:
+            identity_key = build_identity_key(row.lemma, row.translation)
+            existing = False
+            if deck_id is not None:
+                existing = (
+                    self._repository.get_card_by_identity_key(identity_key, deck_id=deck_id)
+                    is not None
+                )
+            if existing or identity_key in seen_keys:
+                duplicate_count += 1
+                continue
+            seen_keys.add(identity_key)
+            ready_rows.append(row)
+        return ready_rows, duplicate_count
+
+
+def _error_preview(deck_name: str, message: str) -> ImportPreview:
+    return ImportPreview(
+        token=None,
+        target_deck_name=deck_name,
+        ready_count=0,
+        duplicate_count=0,
+        rejected_count=0,
+        rejected_messages=[],
+        sample_rows=[],
+        error_message=message,
+    )
+
+
+def _row_payload(row: ParsedCsvRow) -> dict[str, object]:
+    return {
+        "line_number": row.line_number,
+        "lemma": row.lemma,
+        "translation": row.translation,
+        "notes": row.notes,
+        "metadata": row.metadata,
+    }
+
+
+def _stored_row_to_parsed(payload: dict[str, object]) -> ParsedCsvRow:
+    return ParsedCsvRow(
+        line_number=payload["line_number"],
+        lemma=payload["lemma"],
+        translation=payload["translation"],
+        notes=payload["notes"],
+        metadata=payload["metadata"],
+    )

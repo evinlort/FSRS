@@ -64,6 +64,17 @@ class ReviewLogRecord:
 
 
 @dataclass(frozen=True)
+class ImportPreviewRecord:
+    token: str
+    deck_name: str
+    rows: list[dict[str, Any]]
+    rejected_messages: list[str]
+    duplicate_count: int
+    imported_at: datetime
+    created_at: datetime
+
+
+@dataclass(frozen=True)
 class UndoReviewSnapshot:
     card_id: int
     deck_id: int
@@ -125,6 +136,18 @@ def row_to_settings(row: sqlite3.Row) -> AppSettingsRecord:
         default_daily_new_limit=row["default_daily_new_limit"],
         created_at=parse_datetime(row["created_at"]),
         updated_at=parse_datetime(row["updated_at"]),
+    )
+
+
+def row_to_import_preview(row: sqlite3.Row) -> ImportPreviewRecord:
+    return ImportPreviewRecord(
+        token=row["token"],
+        deck_name=row["deck_name"],
+        rows=json.loads(row["rows_json"]),
+        rejected_messages=json.loads(row["rejected_messages_json"]),
+        duplicate_count=row["duplicate_count"],
+        imported_at=parse_datetime(row["imported_at"]),
+        created_at=parse_datetime(row["created_at"]),
     )
 
 

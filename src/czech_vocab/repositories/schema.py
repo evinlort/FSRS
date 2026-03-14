@@ -38,6 +38,16 @@ CREATE TABLE IF NOT EXISTS review_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_review_logs_card_id ON review_logs (card_id, reviewed_at);
+
+CREATE TABLE IF NOT EXISTS import_previews (
+    token TEXT PRIMARY KEY,
+    deck_name TEXT NOT NULL,
+    rows_json TEXT NOT NULL,
+    rejected_messages_json TEXT NOT NULL,
+    duplicate_count INTEGER NOT NULL,
+    imported_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 CARDS_SCHEMA_SQL = """

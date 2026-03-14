@@ -60,19 +60,27 @@ def test_home_page_points_to_import_when_no_cards_exist(client) -> None:
 
 def test_acceptance_flow_covers_import_review_and_catalog(client, app) -> None:
     repository = CardRepository(app.config["DATABASE_PATH"])
-    upload_response = client.post(
-        "/import",
+    preview_response = client.post(
+        "/import/preview",
         data={
             "csv_file": (
                 BytesIO("lemma_cs,translation_ru,notes\nkniha,книга,book note\n".encode("utf-8")),
                 "cards.csv",
             ),
+            "deck_id": "1",
+            "new_deck_name": "",
         },
         content_type="multipart/form-data",
     )
 
+    assert preview_response.status_code == 200
+    preview_page = preview_response.get_data(as_text=True)
+    assert "Предпросмотр импорта" in preview_page
+    token = _extract_preview_token(preview_page)
+    upload_response = client.post("/import/confirm", data={"preview_token": token})
+
     assert upload_response.status_code == 200
-    assert "Создано: 1" in upload_response.get_data(as_text=True)
+    assert "Добавлено карточек: 1" in upload_response.get_data(as_text=True)
     home_after_import = client.get("/").get_data(as_text=True)
     assert "Всего карточек: 1" in home_after_import
     assert "К повторению сегодня: 1" in home_after_import
@@ -97,6 +105,13 @@ def test_acceptance_flow_covers_import_review_and_catalog(client, app) -> None:
     catalog_page = client.get("/cards?q=kniha").get_data(as_text=True)
     assert "kniha" in catalog_page
     assert "книга" in catalog_page
+
+
+def _extract_preview_token(page: str) -> str:
+    marker = 'name="preview_token" value="'
+    start = page.index(marker) + len(marker)
+    end = page.index('"', start)
+    return page[start:end]
 
 
 def create_dashboard_card(

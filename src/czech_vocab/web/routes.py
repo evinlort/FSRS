@@ -36,19 +36,53 @@ def home() -> str:
 
 @main_bp.get("/import")
 def import_page() -> str:
-    return render_template("import.html", summary=None)
+    return _render_import_page()
 
 
-@main_bp.post("/import")
-def import_csv() -> str:
+@main_bp.post("/import/preview")
+def preview_import() -> str:
     file = request.files.get("csv_file")
     if file is None or file.filename == "":
-        summary = {"created_count": 0, "updated_count": 0, "rejected_count": 0, "messages": []}
-        summary["messages"].append("Please choose a CSV file.")
-        return render_template("import.html", summary=summary)
+        return _render_import_page(
+            error_title="Файл не выбран.",
+            error_message="Выберите CSV-файл и попробуйте снова.",
+            form_state=_import_form_state(),
+        )
     service = ImportService(current_app.config["DATABASE_PATH"])
-    summary = service.import_csv_bytes(file.read())
-    return render_template("import.html", summary=summary)
+    form_state = _import_form_state()
+    deck_name = service.resolve_target_deck_name(
+        deck_id=form_state["deck_id"],
+        new_deck_name=form_state["new_deck_name"],
+    )
+    preview = service.create_preview_from_bytes(file.read(), deck_name=deck_name)
+    if preview.error_message:
+        error_title, error_message = _preview_error_context(preview.error_message)
+        return _render_import_page(
+            preview=preview,
+            error_title=error_title,
+            error_message=error_message,
+            error_details=[preview.error_message],
+            form_state=form_state,
+        )
+    return _render_import_page(preview=preview, form_state=form_state)
+
+
+@main_bp.post("/import/confirm")
+def confirm_import() -> str:
+    preview_token = request.form.get("preview_token", "")
+    service = ImportService(current_app.config["DATABASE_PATH"])
+    try:
+        result = service.confirm_preview(preview_token)
+    except LookupError:
+        return _render_import_page(
+            error_title="Предпросмотр недоступен.",
+            error_message="Загрузите CSV-файл заново, чтобы подтвердить импорт.",
+            form_state=_import_form_state(),
+        )
+    return _render_import_page(
+        result=result,
+        form_state={"deck_id": None, "new_deck_name": result.target_deck_name},
+    )
 
 
 @main_bp.get("/review")
@@ -150,6 +184,49 @@ def _resolve_deck(deck_service: DeckSettingsService, deck_id: int | None):
         if deck.id == deck_id:
             return deck
     return deck_service.get_default_deck()
+
+
+def _render_import_page(
+    *,
+    preview=None,
+    result=None,
+    error_title: str | None = None,
+    error_message: str | None = None,
+    error_details: list[str] | None = None,
+    form_state: dict[str, object] | None = None,
+) -> str:
+    deck_service = DeckSettingsService(current_app.config["DATABASE_PATH"])
+    state = form_state or {"deck_id": deck_service.get_default_deck().id, "new_deck_name": ""}
+    return render_template(
+        "import.html",
+        decks=deck_service.list_decks(),
+        form_state=state,
+        preview=preview,
+        result=result,
+        error_title=error_title,
+        error_message=error_message,
+        error_details=error_details or [],
+    )
+
+
+def _import_form_state() -> dict[str, object]:
+    deck_id = request.form.get("deck_id", "")
+    return {
+        "deck_id": _parse_page(deck_id) if deck_id else None,
+        "new_deck_name": request.form.get("new_deck_name", "").strip(),
+    }
+
+
+def _preview_error_context(error_message: str) -> tuple[str, str]:
+    if error_message.startswith("Missing required headers:"):
+        return (
+            "Не удалось распознать обязательные заголовки CSV.",
+            "Проверьте названия колонок и загрузите файл снова.",
+        )
+    return (
+        "Импорт не выполнен.",
+        "Файл не удалось обработать. Проверьте кодировку и попробуйте снова.",
+    )
 
 
 def _redirect_to_review(deck_id: str | None):
