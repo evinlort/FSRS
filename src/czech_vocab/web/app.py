@@ -3,6 +3,7 @@ from typing import Any
 
 from flask import Flask
 
+from czech_vocab.repositories.schema import initialize_database
 from czech_vocab.web.routes import main_bp
 
 DEFAULT_DATABASE_NAME = "czech_vocab.sqlite3"
@@ -24,5 +25,6 @@ def create_app(
     )
     if test_config:
         app.config.update(test_config)
+    initialize_database(Path(app.config["DATABASE_PATH"]))
     app.register_blueprint(main_bp)
     return app
