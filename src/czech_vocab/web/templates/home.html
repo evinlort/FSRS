@@ -1,16 +1,35 @@
 {% extends "base.html" %}
 
+{% block title %}Главная{% endblock %}
+{% block page_eyebrow %}Панель{% endblock %}
+{% block page_title %}Главная{% endblock %}
+{% block page_intro %}
+  <p>Импортируйте словарь, повторяйте карточки и просматривайте каталог в одном приложении.</p>
+{% endblock %}
+{% block page_actions %}
+  <a class="button button--primary" href="{{ url_for('main.review_page') }}">Начать повторение</a>
+{% endblock %}
+
 {% block content %}
-  <section>
-    <h2>Dashboard</h2>
-    <p>Total cards: {{ dashboard.total_cards }}</p>
-    <p>Due cards: {{ dashboard.due_cards }}</p>
+  <section class="panel-grid">
+    <article class="panel">
+      <h2 class="panel__title">Карточки</h2>
+      <p>Всего карточек: {{ dashboard.total_cards }}</p>
+    </article>
+    <article class="panel panel--accent">
+      <h2 class="panel__title">Повторение</h2>
+      <p>К повторению: {{ dashboard.due_cards }}</p>
+    </article>
   </section>
 
-  <section>
-    <p>Start by importing vocabulary, then review due cards and browse your catalog.</p>
-    <p><a href="/import">Go to Import</a></p>
-    <p><a href="/review">Go to Review</a></p>
-    <p><a href="/cards">Go to Cards</a></p>
+  <section class="panel-stack">
+    <article class="panel">
+      <h2 class="panel__title">Следующие шаги</h2>
+      <p>Сначала импортируйте словарь, затем повторяйте карточки и проверяйте каталог.</p>
+      <div class="action-row">
+        <a class="button" href="{{ url_for('main.import_page') }}">Открыть импорт</a>
+        <a class="button" href="{{ url_for('main.cards_page') }}">Открыть карточки</a>
+      </div>
+    </article>
   </section>
 {% endblock %}

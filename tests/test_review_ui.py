@@ -32,7 +32,7 @@ def test_review_page_shows_empty_state_when_nothing_is_due(client) -> None:
     response = client.get("/review")
 
     assert response.status_code == 200
-    assert "No cards are due right now." in response.get_data(as_text=True)
+    assert "Сейчас нет карточек для повторения." in response.get_data(as_text=True)
 
 
 def test_posting_valid_grade_redirects_and_persists_review(client, app) -> None:

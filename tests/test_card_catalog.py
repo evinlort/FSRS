@@ -15,8 +15,8 @@ def test_cards_page_lists_cards_ordered_by_lemma(client, app) -> None:
     assert response.status_code == 200
     page = response.get_data(as_text=True)
     assert page.index("auto") < page.index("dum") < page.index("vlak")
-    assert "State: learning" in page
-    assert "Due:" in page
+    assert "Состояние: learning" in page
+    assert "Срок:" in page
 
 
 def test_cards_page_searches_czech_russian_and_notes(client, app) -> None:

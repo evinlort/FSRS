@@ -22,9 +22,9 @@ def test_valid_csv_upload_creates_cards_and_shows_summary(client, app) -> None:
 
     assert response.status_code == 200
     page = response.get_data(as_text=True)
-    assert "Created: 2" in page
-    assert "Updated: 0" in page
-    assert "Rejected: 0" in page
+    assert "Создано: 2" in page
+    assert "Обновлено: 0" in page
+    assert "Отклонено: 0" in page
     assert count_cards(app.config["DATABASE_PATH"]) == 2
     stored_card = fetch_card(app.config["DATABASE_PATH"], "kniha", "книга")
     assert stored_card is not None
@@ -40,8 +40,8 @@ def test_reimport_updates_existing_card_without_duplicate_or_schedule_reset(clie
 
     assert response.status_code == 200
     page = response.get_data(as_text=True)
-    assert "Created: 0" in page
-    assert "Updated: 1" in page
+    assert "Создано: 0" in page
+    assert "Обновлено: 1" in page
     assert count_cards(app.config["DATABASE_PATH"]) == 1
     updated = fetch_card(app.config["DATABASE_PATH"], "kniha", "книга")
     assert updated is not None
@@ -58,8 +58,8 @@ def test_row_errors_are_reported_while_valid_rows_import(client, app) -> None:
 
     assert response.status_code == 200
     page = response.get_data(as_text=True)
-    assert "Created: 1" in page
-    assert "Rejected: 1" in page
+    assert "Создано: 1" in page
+    assert "Отклонено: 1" in page
     assert "Line 3: Missing required value: czech" in page
     assert count_cards(app.config["DATABASE_PATH"]) == 1
 

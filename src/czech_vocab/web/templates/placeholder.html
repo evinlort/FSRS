@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_name }}{% endblock %}
+{% block page_eyebrow %}Скоро{% endblock %}
+{% block page_title %}{{ page_name }}{% endblock %}
+{% block page_intro %}
+  <p>{{ page_message }}</p>
+{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <p>{{ page_message }}</p>
+  </section>
+{% endblock %}

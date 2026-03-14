@@ -1,21 +1,27 @@
 {% extends "base.html" %}
 
+{% block title %}Импорт{% endblock %}
+{% block page_eyebrow %}CSV{% endblock %}
+{% block page_title %}Импорт словаря{% endblock %}
+{% block page_intro %}
+  <p>Загрузите CSV-файл с чешскими словами и русскими переводами.</p>
+{% endblock %}
+
 {% block content %}
-  <section>
-    <h2>Import Vocabulary</h2>
+  <section class="panel">
     <form method="post" enctype="multipart/form-data">
-      <label for="csv_file">CSV file</label>
+      <label class="field-label" for="csv_file">CSV-файл</label>
       <input id="csv_file" type="file" name="csv_file" accept=".csv,text/csv">
-      <button type="submit">Import CSV</button>
+      <button class="button button--primary" type="submit">Импортировать CSV</button>
     </form>
   </section>
 
   {% if summary %}
-    <section>
-      <h3>Import Summary</h3>
-      <p>Created: {{ summary.created_count }}</p>
-      <p>Updated: {{ summary.updated_count }}</p>
-      <p>Rejected: {{ summary.rejected_count }}</p>
+    <section class="panel">
+      <h2 class="panel__title">Итоги импорта</h2>
+      <p>Создано: {{ summary.created_count }}</p>
+      <p>Обновлено: {{ summary.updated_count }}</p>
+      <p>Отклонено: {{ summary.rejected_count }}</p>
       {% if summary.messages %}
         <ul>
           {% for message in summary.messages %}

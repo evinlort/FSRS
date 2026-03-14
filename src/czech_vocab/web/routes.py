@@ -64,6 +64,24 @@ def cards_page() -> str:
     return render_template("cards.html", catalog_page=catalog_page)
 
 
+@main_bp.get("/stats")
+def stats_page() -> str:
+    return render_template(
+        "placeholder.html",
+        page_name="Статистика",
+        page_message="Раздел статистики будет добавлен на следующем UI-шаге.",
+    )
+
+
+@main_bp.get("/settings")
+def settings_page() -> str:
+    return render_template(
+        "placeholder.html",
+        page_name="Настройки",
+        page_message="Раздел настроек будет добавлен на следующем UI-шаге.",
+    )
+
+
 def _parse_page(raw_page: str) -> int:
     try:
         return int(raw_page)

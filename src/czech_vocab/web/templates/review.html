@@ -1,14 +1,20 @@
 {% extends "base.html" %}
 
+{% block title %}Повторение{% endblock %}
+{% block page_eyebrow %}FSRS{% endblock %}
+{% block page_title %}Повторение{% endblock %}
+{% block page_intro %}
+  <p>Здесь показывается следующая карточка, которую пора повторить.</p>
+{% endblock %}
+
 {% block content %}
-  <section>
-    <h2>Review</h2>
+  <section class="panel">
     {% if review_card %}
-      <article>
-        <h3>{{ review_card.lemma }}</h3>
-        <p><strong>Russian:</strong> {{ review_card.translation }}</p>
+      <article class="study-card">
+        <h2 class="study-card__title">{{ review_card.lemma }}</h2>
+        <p><strong>Перевод:</strong> {{ review_card.translation }}</p>
         {% if review_card.notes %}
-          <p><strong>Notes:</strong> {{ review_card.notes }}</p>
+          <p><strong>Заметки:</strong> {{ review_card.notes }}</p>
         {% endif %}
         {% if review_card.metadata %}
           <dl>
@@ -18,15 +24,15 @@
             {% endfor %}
           </dl>
         {% endif %}
-        <form method="post" action="/review/{{ review_card.card_id }}/grade">
-          <button type="submit" name="rating" value="Again">Again</button>
-          <button type="submit" name="rating" value="Hard">Hard</button>
-          <button type="submit" name="rating" value="Good">Good</button>
-          <button type="submit" name="rating" value="Easy">Easy</button>
+        <form class="action-row" method="post" action="{{ url_for('main.submit_review', card_id=review_card.card_id) }}">
+          <button class="button" type="submit" name="rating" value="Again">Again</button>
+          <button class="button" type="submit" name="rating" value="Hard">Hard</button>
+          <button class="button button--primary" type="submit" name="rating" value="Good">Good</button>
+          <button class="button" type="submit" name="rating" value="Easy">Easy</button>
         </form>
       </article>
     {% else %}
-      <p>No cards are due right now.</p>
+      <p>Сейчас нет карточек для повторения.</p>
     {% endif %}
   </section>
 {% endblock %}

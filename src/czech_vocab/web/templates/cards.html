@@ -1,27 +1,33 @@
 {% extends "base.html" %}
 
+{% block title %}Карточки{% endblock %}
+{% block page_eyebrow %}Каталог{% endblock %}
+{% block page_title %}Карточки{% endblock %}
+{% block page_intro %}
+  <p>Ищите карточки по чешскому слову, переводу или заметкам.</p>
+{% endblock %}
+
 {% block content %}
-  <section>
-    <h2>Cards</h2>
-    <form method="get" action="/cards">
-      <label for="q">Search</label>
+  <section class="panel">
+    <form method="get" action="{{ url_for('main.cards_page') }}">
+      <label class="field-label" for="q">Поиск</label>
       <input id="q" name="q" value="{{ catalog_page.query }}">
-      <button type="submit">Find</button>
+      <button class="button button--primary" type="submit">Найти</button>
     </form>
   </section>
 
-  <section>
+  <section class="panel">
     {% if catalog_page.cards %}
-      <ul>
+      <ul class="card-list">
         {% for card in catalog_page.cards %}
-          <li>
-            <h3>{{ card.lemma }}</h3>
-            <p><strong>Russian:</strong> {{ card.translation }}</p>
+          <li class="card-list__item">
+            <h2 class="card-list__title">{{ card.lemma }}</h2>
+            <p><strong>Перевод:</strong> {{ card.translation }}</p>
             {% if card.notes %}
-              <p><strong>Notes:</strong> {{ card.notes }}</p>
+              <p><strong>Заметки:</strong> {{ card.notes }}</p>
             {% endif %}
-            <p>Due: {{ card.due_text }}</p>
-            <p>State: {{ card.state_text }}</p>
+            <p>Срок: {{ card.due_text }}</p>
+            <p>Состояние: {{ card.state_text }}</p>
             {% if card.metadata %}
               <dl>
                 {% for key, value in card.metadata.items() %}
@@ -34,16 +40,16 @@
         {% endfor %}
       </ul>
     {% else %}
-      <p>No cards matched your search.</p>
+      <p>Карточки по этому запросу не найдены.</p>
     {% endif %}
   </section>
 
-  <nav aria-label="Pagination">
+  <nav class="pager" aria-label="Пагинация">
     {% if catalog_page.has_previous %}
-      <a href="{{ url_for('main.cards_page', q=catalog_page.query, page=catalog_page.page - 1) }}">Previous</a>
+      <a class="button" href="{{ url_for('main.cards_page', q=catalog_page.query, page=catalog_page.page - 1) }}">Назад</a>
     {% endif %}
     {% if catalog_page.has_next %}
-      <a href="{{ url_for('main.cards_page', q=catalog_page.query, page=catalog_page.page + 1) }}">Next</a>
+      <a class="button" href="{{ url_for('main.cards_page', q=catalog_page.query, page=catalog_page.page + 1) }}">Дальше</a>
     {% endif %}
   </nav>
 {% endblock %}

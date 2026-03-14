@@ -1,20 +1,62 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Czech Vocabulary FSRS</title>
+    <title>{% block title %}Чешский словарь{% endblock %} · Czech Vocabulary FSRS</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
   </head>
-  <body>
-    <header>
-      <h1>Czech Vocabulary FSRS</h1>
-      <nav aria-label="Primary">
-        <a href="/import">Import</a>
-        <a href="/review">Review</a>
-        <a href="/cards">Cards</a>
+  <body class="app-shell">
+    <a class="skip-link" href="#main-content">Перейти к содержанию</a>
+    <header class="site-header">
+      <div class="site-header__inner">
+        <a class="site-brand" href="{{ url_for('main.home') }}">
+          <span class="site-brand__eyebrow">FSRS</span>
+          <span class="site-brand__title">Чешский словарь</span>
+        </a>
+        <button
+          class="nav-toggle"
+          type="button"
+          aria-expanded="false"
+          aria-controls="primary-nav"
+          data-nav-toggle
+        >
+          Меню
+        </button>
+      </div>
+      <nav id="primary-nav" class="site-nav" aria-label="Основная навигация" data-nav>
+        <a class="site-nav__link" href="{{ url_for('main.home') }}">Главная</a>
+        <a class="site-nav__link site-nav__link--primary" href="{{ url_for('main.review_page') }}">
+          Повторение
+        </a>
+        <a class="site-nav__link" href="{{ url_for('main.cards_page') }}">Карточки</a>
+        <a class="site-nav__link" href="{{ url_for('main.import_page') }}">Импорт</a>
+        <a class="site-nav__link" href="{{ url_for('main.stats_page') }}">Статистика</a>
+        <a class="site-nav__link" href="{{ url_for('main.settings_page') }}">Настройки</a>
       </nav>
     </header>
-    <main>
+    <main id="main-content" class="page-shell">
+      {% with flashes = get_flashed_messages(with_categories=true) %}
+        {% if flashes %}
+          <section class="flash-stack" aria-label="Сообщения">
+            {% for category, message in flashes %}
+              <p class="flash flash--{{ category }}">{{ message }}</p>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+      <header class="page-header">
+        <div class="page-header__copy">
+          <p class="page-header__eyebrow">{% block page_eyebrow %}MVP{% endblock %}</p>
+          <h1 class="page-header__title">{% block page_title %}Чешский словарь{% endblock %}</h1>
+          {% set intro = self.page_intro() | trim %}
+          {% if intro %}
+            <div class="page-header__intro">{{ intro }}</div>
+          {% endif %}
+        </div>
+        <div class="page-header__actions">{% block page_actions %}{% endblock %}</div>
+      </header>
       {% block content %}{% endblock %}
     </main>
   </body>
