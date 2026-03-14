@@ -1,5 +1,16 @@
 {% extends "base.html" %}
 
 {% block content %}
-  <p>Start by importing vocabulary, then review due cards and browse your catalog.</p>
+  <section>
+    <h2>Dashboard</h2>
+    <p>Total cards: {{ dashboard.total_cards }}</p>
+    <p>Due cards: {{ dashboard.due_cards }}</p>
+  </section>
+
+  <section>
+    <p>Start by importing vocabulary, then review due cards and browse your catalog.</p>
+    <p><a href="/import">Go to Import</a></p>
+    <p><a href="/review">Go to Review</a></p>
+    <p><a href="/cards">Go to Cards</a></p>
+  </section>
 {% endblock %}

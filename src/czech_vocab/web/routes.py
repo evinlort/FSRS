@@ -2,14 +2,16 @@ from datetime import UTC, datetime
 
 from flask import Blueprint, current_app, redirect, render_template, request, url_for
 
-from czech_vocab.services import CardCatalogService, ImportService, StudyService
+from czech_vocab.services import CardCatalogService, DashboardService, ImportService, StudyService
 
 main_bp = Blueprint("main", __name__)
 
 
 @main_bp.get("/")
 def home() -> str:
-    return render_template("home.html")
+    service = DashboardService(current_app.config["DATABASE_PATH"])
+    dashboard = service.get_dashboard_data(now=datetime.now(UTC))
+    return render_template("home.html", dashboard=dashboard)
 
 
 @main_bp.get("/import")
