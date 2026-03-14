@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section>
+    <h2>Review</h2>
+    {% if review_card %}
+      <article>
+        <h3>{{ review_card.lemma }}</h3>
+        <p><strong>Russian:</strong> {{ review_card.translation }}</p>
+        {% if review_card.notes %}
+          <p><strong>Notes:</strong> {{ review_card.notes }}</p>
+        {% endif %}
+        {% if review_card.metadata %}
+          <dl>
+            {% for key, value in review_card.metadata.items() %}
+              <dt>{{ key }}</dt>
+              <dd>{{ value }}</dd>
+            {% endfor %}
+          </dl>
+        {% endif %}
+        <form method="post" action="/review/{{ review_card.card_id }}/grade">
+          <button type="submit" name="rating" value="Again">Again</button>
+          <button type="submit" name="rating" value="Hard">Hard</button>
+          <button type="submit" name="rating" value="Good">Good</button>
+          <button type="submit" name="rating" value="Easy">Easy</button>
+        </form>
+      </article>
+    {% else %}
+      <p>No cards are due right now.</p>
+    {% endif %}
+  </section>
+{% endblock %}
