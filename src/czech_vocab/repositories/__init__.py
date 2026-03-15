@@ -3,6 +3,7 @@
 from czech_vocab.repositories.card_repository import (
     CardRepository,
 )
+from czech_vocab.repositories.deck_card_repository import DeckCardRepository
 from czech_vocab.repositories.deck_repository import DeckRepository
 from czech_vocab.repositories.import_preview_repository import ImportPreviewRepository
 from czech_vocab.repositories.records import (
@@ -23,6 +24,7 @@ __all__ = [
     "CardCreate",
     "CardRecord",
     "CardRepository",
+    "DeckCardRepository",
     "DeckRecord",
     "DeckRepository",
     "ImportPreviewRecord",

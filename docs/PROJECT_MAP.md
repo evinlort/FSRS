@@ -23,6 +23,7 @@
   - FSRS adapter around the `fsrs` package
   - deck-aware review queue rules
   - import preview persistence
+  - runtime deck membership now resolved through `deck_cards` joins rather than `cards.deck_id`
 - Major missing or partial areas:
   - global-base schema refactor has started: `cards` are now schema-level global rows with `deck_cards` links, but most repositories/services still assume the older deck-owned access pattern and are scheduled to be migrated next
   - no optimizer or FSRS parameter fitting
@@ -105,7 +106,7 @@
   - service: [`ImportService`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/import_service.py)
   - repositories: `DeckRepository`, `CardRepository`, `ImportPreviewRepository`
   - inputs: `csv_file`, `deck_id`, `new_deck_name`
-  - DB access: `decks`, `cards`, `import_previews`
+  - DB access: `decks`, `cards`, `deck_cards`, `import_previews`
 
 - `/import/confirm`
   - methods: `POST`
@@ -113,7 +114,7 @@
   - template: `import.html`
   - service: `ImportService`
   - inputs: `preview_token`
-  - DB access: `import_previews`, `decks`, `cards`
+  - DB access: `import_previews`, `decks`, `cards`, `deck_cards`
 
 - `/review`
   - methods: `GET`
@@ -121,14 +122,14 @@
   - template: [`review.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/review.html)
   - services: [`StudyService`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/study_service.py), `DeckSettingsService`
   - inputs: query param `deck`
-  - DB access: `decks`, `cards`, `review_logs`
+  - DB access: `decks`, `cards`, `deck_cards`, `review_logs`
 
 - `/review/<card_id>/grade`
   - methods: `POST`
   - handler: `submit_review()`
   - service: `StudyService`
   - inputs: form `rating`, `deck`
-  - DB access: `cards`, `review_logs`
+  - DB access: `cards`, `deck_cards`, `review_logs`
   - side effect: writes session key `review_undo`
 
 - `/review/undo`
@@ -145,7 +146,7 @@
   - template: [`cards.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/cards.html)
   - service: [`CardCatalogService`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/card_catalog_service.py)
   - inputs: `deck`, `status`, `search_in`, `q`, `page`
-  - DB access: `cards`, `decks`, `review_logs`
+  - DB access: `cards`, `deck_cards`, `decks`, `review_logs`
 
 - `/cards/<card_id>/edit`
   - methods: `GET`, `POST`
@@ -153,7 +154,7 @@
   - template: [`card_edit.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/card_edit.html)
   - service: [`CardEditService`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/card_edit_service.py)
   - inputs: `deck_id`, `lemma`, `translation`, `notes`, `metadata_key_*`, `metadata_value_*`
-  - DB access: `cards`, `decks`
+  - DB access: `cards`, `deck_cards`, `decks`
 
 - `/stats`
   - methods: `GET`
@@ -161,7 +162,7 @@
   - template: [`stats.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/stats.html)
   - service: [`StatsService`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/stats_service.py)
   - inputs: query param `deck`
-  - DB access: `cards`, `decks`, `review_logs`, `app_settings`
+  - DB access: `cards`, `deck_cards`, `decks`, `review_logs`, `app_settings`
 
 - `/settings`
   - methods: `GET`, `POST`
@@ -197,8 +198,8 @@
   - important fields: `card_id`, `deck_id`, `created_at`
   - relations: `card_id -> cards.id`, `deck_id -> decks.id`
   - uniqueness: `card_id` is unique so a card can belong to at most one active deck
-  - written by: currently only schema migration; population flows are planned next
-  - read by: not yet the main runtime source of truth; consumer migration is the next planned implementation step
+  - written by: schema migration, card creation, import confirm, and card edit reassignment
+  - read by: review queue, dashboard, cards list, stats, and duplicate lookup by deck
 
 - `deck_population_drafts`
   - role: server-side draft state for manual deck population flows
@@ -231,7 +232,8 @@
   - it owns rating parsing, default state creation, and review application
 
 - Repository ownership
-  - `CardRepository`: cards + review logs
+  - `CardRepository`: global card rows + review logs
+  - `DeckCardRepository`: deck membership writes and deck-scoped card queries
   - `DeckRepository`: decks
   - `AppSettingsRepository`: app settings
   - `ImportPreviewRepository`: import previews
@@ -241,7 +243,7 @@
   - `ImportService`
     - calls CSV parser
     - resolves deck via `DeckSettingsService`
-    - checks duplicates via `CardRepository`
+    - checks duplicates via `CardRepository` deck lookups
     - stores previews via `ImportPreviewRepository`
     - initializes FSRS state via `FsrsScheduler`
   - `StudyService`
@@ -251,17 +253,17 @@
     - writes `cards` and `review_logs`
   - `DashboardService`
     - reads aggregate card/deck/review data
-    - currently uses direct SQL through `CardRepository.connect()`
+    - currently uses direct SQL through `CardRepository.connect()` with `deck_cards` joins
   - `CardCatalogService`
     - builds filtered list view
-    - currently uses direct SQL through `CardRepository.connect()`
+    - currently uses direct SQL through `CardRepository.connect()` with `deck_cards` joins
   - `CardEditService`
     - validates editable fields
     - normalizes metadata keys using CSV header normalization
-    - writes cards through `CardRepository`
+    - writes shared card content through `CardRepository` and reassigns deck membership through the repository layer
   - `StatsService`
     - builds 30-day metrics
-    - mixes `CardRepository.connect()` SQL with `DeckRepository`/`AppSettingsRepository`
+    - mixes `CardRepository.connect()` SQL with `DeckRepository`/`AppSettingsRepository`, now through `deck_cards` joins
   - `DeckSettingsService`
     - thin wrapper around deck/app-settings repositories
     - creates new decks from app defaults

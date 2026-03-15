@@ -98,7 +98,7 @@ def _build_deck_options(deck_repository: DeckRepository) -> list[StatsDeckOption
 def _deck_filter_clause(selected_deck: str) -> tuple[str, tuple[object, ...]]:
     if selected_deck == "all":
         return "", ()
-    return " AND cards.deck_id = ?", (int(selected_deck),)
+    return " AND deck_cards.deck_id = ?", (int(selected_deck),)
 
 
 def _count_due_today(connection, selected_deck: str, day_end: datetime) -> int:
@@ -107,6 +107,7 @@ def _count_due_today(connection, selected_deck: str, day_end: datetime) -> int:
         f"""
         SELECT COUNT(*)
         FROM cards
+        JOIN deck_cards ON deck_cards.card_id = cards.id
         WHERE cards.due_at IS NOT NULL
           AND cards.due_at < ?{where_sql}
         """,
@@ -122,6 +123,7 @@ def _count_reviews(connection, selected_deck: str, day_start: datetime, day_end:
         SELECT COUNT(*)
         FROM review_logs
         JOIN cards ON cards.id = review_logs.card_id
+        JOIN deck_cards ON deck_cards.card_id = cards.id
         WHERE review_logs.undone_at IS NULL
           AND review_logs.reviewed_at >= ?
           AND review_logs.reviewed_at < ?{where_sql}
@@ -143,6 +145,7 @@ def _count_outcomes(
         SELECT review_logs.rating, COUNT(*) AS total
         FROM review_logs
         JOIN cards ON cards.id = review_logs.card_id
+        JOIN deck_cards ON deck_cards.card_id = cards.id
         WHERE review_logs.undone_at IS NULL
           AND review_logs.reviewed_at >= ?
           AND review_logs.reviewed_at < ?{where_sql}
@@ -161,6 +164,7 @@ def _average_interval_text(connection, selected_deck: str) -> str:
         f"""
         SELECT due_at, last_review_at
         FROM cards
+        JOIN deck_cards ON deck_cards.card_id = cards.id
         WHERE due_at IS NOT NULL
           AND last_review_at IS NOT NULL{where_sql}
         """,
@@ -197,6 +201,7 @@ def _load_summary_rows(
             COUNT(*) AS reviewed_count
         FROM review_logs
         JOIN cards ON cards.id = review_logs.card_id
+        JOIN deck_cards ON deck_cards.card_id = cards.id
         WHERE review_logs.undone_at IS NULL
           AND review_logs.reviewed_at >= ?
           AND review_logs.reviewed_at < ?{where_sql}

@@ -180,7 +180,8 @@ def fetch_card(database_path, lemma: str, translation: str, *, deck_name: str = 
             """
             SELECT cards.notes, cards.due_at, cards.fsrs_state_json
             FROM cards
-            JOIN decks ON decks.id = cards.deck_id
+            JOIN deck_cards ON deck_cards.card_id = cards.id
+            JOIN decks ON decks.id = deck_cards.deck_id
             WHERE cards.identity_key = ? AND decks.name = ?
             """,
             (identity_key, deck_name),

@@ -113,6 +113,7 @@ class CardCatalogService:
                 """
                 SELECT
                     cards.*,
+                    deck_cards.deck_id AS deck_id,
                     decks.name AS deck_name,
                     EXISTS (
                         SELECT 1
@@ -121,7 +122,8 @@ class CardCatalogService:
                           AND review_logs.undone_at IS NULL
                     ) AS is_learned
                 FROM cards
-                JOIN decks ON decks.id = cards.deck_id
+                JOIN deck_cards ON deck_cards.card_id = cards.id
+                JOIN decks ON decks.id = deck_cards.deck_id
                 ORDER BY cards.lemma, cards.id
                 """
             ).fetchall()

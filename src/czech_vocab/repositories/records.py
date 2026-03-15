@@ -16,13 +16,13 @@ class CardCreate:
     fsrs_state: dict[str, Any]
     due_at: datetime | None
     last_review_at: datetime | None
-    deck_id: int = 1
+    deck_id: int | None = 1
 
 
 @dataclass(frozen=True)
 class CardRecord:
     id: int
-    deck_id: int
+    deck_id: int | None
     identity_key: str
     lemma: str
     translation: str
@@ -108,9 +108,10 @@ def parse_datetime(value: str | None) -> datetime | None:
 
 
 def row_to_card(row: sqlite3.Row) -> CardRecord:
+    keys = set(row.keys())
     return CardRecord(
         id=row["id"],
-        deck_id=row["deck_id"],
+        deck_id=row["deck_id"] if "deck_id" in keys else None,
         identity_key=row["identity_key"],
         lemma=row["lemma"],
         translation=row["translation"],

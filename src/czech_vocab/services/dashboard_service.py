@@ -65,7 +65,8 @@ class DashboardService:
                         0
                     ) AS due_cards
                 FROM decks
-                LEFT JOIN cards ON cards.deck_id = decks.id
+                LEFT JOIN deck_cards ON deck_cards.deck_id = decks.id
+                LEFT JOIN cards ON cards.id = deck_cards.card_id
                 GROUP BY decks.id, decks.name
                 ORDER BY decks.id
                 """,
@@ -93,7 +94,8 @@ class DashboardService:
                     review_logs.reviewed_at
                 FROM review_logs
                 JOIN cards ON cards.id = review_logs.card_id
-                JOIN decks ON decks.id = cards.deck_id
+                JOIN deck_cards ON deck_cards.card_id = cards.id
+                JOIN decks ON decks.id = deck_cards.deck_id
                 WHERE review_logs.undone_at IS NULL
                 ORDER BY review_logs.reviewed_at DESC, review_logs.id DESC
                 LIMIT 5

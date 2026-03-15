@@ -30,13 +30,22 @@ def test_app_startup_bootstraps_sqlite_schema(tmp_path: Path) -> None:
             "SELECT name FROM sqlite_master WHERE type = 'table'",
         ).fetchall()
 
-    assert {"cards", "review_logs", "decks", "app_settings", "import_previews"} <= {
+    assert {
+        "cards",
+        "review_logs",
+        "decks",
+        "app_settings",
+        "import_previews",
+        "deck_cards",
+        "deck_population_drafts",
+    } <= {
         name for (name,) in rows
     }
     settings = AppSettingsRepository(database_path).get_settings()
     default_deck = DeckRepository(database_path).get_default_deck()
     assert settings.default_desired_retention == 0.90
     assert settings.default_daily_new_limit == 20
+    assert settings.default_target_deck_card_count == 20
     assert default_deck.name == "Основная"
 
 
@@ -177,7 +186,9 @@ def test_query_due_cards_and_search_cards(tmp_path: Path) -> None:
     assert [card.lemma for card in repository.search_cards("маш")] == ["auto"]
 
 
-def test_cards_can_share_identity_across_different_decks(tmp_path: Path) -> None:
+def test_update_card_content_moves_card_between_decks_without_changing_card_id(
+    tmp_path: Path,
+) -> None:
     repository = build_repository(tmp_path / "cards.sqlite3")
     deck_repository = DeckRepository(tmp_path / "cards.sqlite3")
     second_deck = deck_repository.create_deck(
@@ -186,7 +197,7 @@ def test_cards_can_share_identity_across_different_decks(tmp_path: Path) -> None
         daily_new_limit=12,
     )
 
-    first_card = repository.create_card(
+    created = repository.create_card(
         CardCreate(
             identity_key="identity-shared",
             lemma="kniha",
@@ -198,26 +209,25 @@ def test_cards_can_share_identity_across_different_decks(tmp_path: Path) -> None
             last_review_at=None,
         ),
     )
-    second_card = repository.create_card(
-        CardCreate(
-            identity_key="identity-shared",
-            lemma="kniha",
-            translation="книга",
-            notes="deck two",
-            metadata={},
-            fsrs_state={},
-            due_at=None,
-            last_review_at=None,
-            deck_id=second_deck.id,
-        ),
+
+    repository.update_card_content(
+        card_id=created.id,
+        deck_id=second_deck.id,
+        identity_key="identity-shared",
+        lemma="kniha",
+        translation="книга",
+        notes="deck two",
+        metadata={"topic": "travel"},
     )
 
-    assert first_card.deck_id != second_card.deck_id
-    assert repository.get_card_by_identity_key("identity-shared", deck_id=1) == first_card
-    assert (
-        repository.get_card_by_identity_key("identity-shared", deck_id=second_deck.id)
-        == second_card
-    )
+    updated = repository.get_card_by_id(created.id)
+    assert updated is not None
+    assert updated.id == created.id
+    assert updated.deck_id == second_deck.id
+    assert updated.notes == "deck two"
+    assert updated.metadata == {"topic": "travel"}
+    assert repository.get_card_by_identity_key("identity-shared", deck_id=1) is None
+    assert repository.get_card_by_identity_key("identity-shared", deck_id=second_deck.id) == updated
 
 
 def build_repository(database_path: Path) -> CardRepository:

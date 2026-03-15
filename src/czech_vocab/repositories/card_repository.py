@@ -4,10 +4,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from czech_vocab.repositories.deck_card_repository import DeckCardRepository
 from czech_vocab.repositories.records import (
     CardCreate,
     CardRecord,
     ReviewLogRecord,
+    build_lemma_key,
     dump_json,
     matches_query,
     parse_datetime,
@@ -16,10 +18,17 @@ from czech_vocab.repositories.records import (
     utc_now,
 )
 
+CARD_SELECT = """
+SELECT cards.*, deck_cards.deck_id AS deck_id
+FROM cards
+LEFT JOIN deck_cards ON deck_cards.card_id = cards.id
+"""
+
 
 class CardRepository:
     def __init__(self, database_path: Path) -> None:
         self._database_path = database_path
+        self._deck_card_repository = DeckCardRepository(database_path)
 
     def get_card_by_id(
         self,
@@ -27,7 +36,7 @@ class CardRepository:
         *,
         connection: sqlite3.Connection | None = None,
     ) -> CardRecord | None:
-        query = "SELECT * FROM cards WHERE id = ?"
+        query = f"{CARD_SELECT} WHERE cards.id = ?"
         return self._fetch_one(query, (card_id,), connection=connection)
 
     def get_card_by_identity_key(
@@ -37,7 +46,7 @@ class CardRepository:
         deck_id: int = 1,
         connection: sqlite3.Connection | None = None,
     ) -> CardRecord | None:
-        query = "SELECT * FROM cards WHERE deck_id = ? AND identity_key = ?"
+        query = f"{CARD_SELECT} WHERE deck_cards.deck_id = ? AND cards.identity_key = ?"
         return self._fetch_one(query, (deck_id, identity_key), connection=connection)
 
     def create_card(
@@ -46,9 +55,9 @@ class CardRepository:
         *,
         connection: sqlite3.Connection | None = None,
     ) -> CardRecord:
-        timestamp = utc_now()
+        timestamp = serialize_datetime(utc_now())
         payload = (
-            card.deck_id,
+            build_lemma_key(card.lemma),
             card.identity_key,
             card.lemma,
             card.translation,
@@ -57,14 +66,14 @@ class CardRepository:
             dump_json(card.fsrs_state),
             serialize_datetime(card.due_at),
             serialize_datetime(card.last_review_at),
-            serialize_datetime(timestamp),
-            serialize_datetime(timestamp),
+            timestamp,
+            timestamp,
         )
         with self._use_connection(connection) as active_connection:
             cursor = active_connection.execute(
                 """
                 INSERT INTO cards (
-                    deck_id,
+                    lemma_key,
                     identity_key,
                     lemma,
                     translation,
@@ -79,6 +88,12 @@ class CardRepository:
                 """,
                 payload,
             )
+            if card.deck_id is not None:
+                self._deck_card_repository.assign_card_to_deck(
+                    card_id=cursor.lastrowid,
+                    deck_id=card.deck_id,
+                    connection=active_connection,
+                )
             created = self.get_card_by_id(cursor.lastrowid, connection=active_connection)
         assert created is not None
         return created
@@ -93,22 +108,15 @@ class CardRepository:
         metadata: dict[str, Any],
         connection: sqlite3.Connection | None = None,
     ) -> None:
-        with self._use_connection(connection) as active_connection:
-            active_connection.execute(
-                """
-                UPDATE cards
-                SET lemma = ?, translation = ?, notes = ?, metadata_json = ?, updated_at = ?
-                WHERE id = ?
-                """,
-                (
-                    lemma,
-                    translation,
-                    notes,
-                    dump_json(metadata),
-                    serialize_datetime(utc_now()),
-                    card_id,
-                ),
-            )
+        self._update_card_fields(
+            card_id=card_id,
+            identity_key=None,
+            lemma=lemma,
+            translation=translation,
+            notes=notes,
+            metadata=metadata,
+            connection=connection,
+        )
 
     def update_card_content(
         self,
@@ -123,29 +131,19 @@ class CardRepository:
         connection: sqlite3.Connection | None = None,
     ) -> None:
         with self._use_connection(connection) as active_connection:
-            active_connection.execute(
-                """
-                UPDATE cards
-                SET
-                    deck_id = ?,
-                    identity_key = ?,
-                    lemma = ?,
-                    translation = ?,
-                    notes = ?,
-                    metadata_json = ?,
-                    updated_at = ?
-                WHERE id = ?
-                """,
-                (
-                    deck_id,
-                    identity_key,
-                    lemma,
-                    translation,
-                    notes,
-                    dump_json(metadata),
-                    serialize_datetime(utc_now()),
-                    card_id,
-                ),
+            self._update_card_fields(
+                card_id=card_id,
+                identity_key=identity_key,
+                lemma=lemma,
+                translation=translation,
+                notes=notes,
+                metadata=metadata,
+                connection=active_connection,
+            )
+            self._deck_card_repository.assign_card_to_deck(
+                card_id=card_id,
+                deck_id=deck_id,
+                connection=active_connection,
             )
 
     def update_schedule_state(
@@ -221,17 +219,7 @@ class CardRepository:
                 """,
                 (card_id,),
             ).fetchall()
-        return [
-            ReviewLogRecord(
-                id=row["id"],
-                card_id=row["card_id"],
-                rating=row["rating"],
-                reviewed_at=parse_datetime(row["reviewed_at"]),
-                review_duration_seconds=row["review_duration_seconds"],
-                undone_at=parse_datetime(row["undone_at"]),
-            )
-            for row in rows
-        ]
+        return [_row_to_review_log(row) for row in rows]
 
     def get_latest_active_review_log(
         self,
@@ -270,12 +258,7 @@ class CardRepository:
             )
 
     def count_cards_in_deck(self, deck_id: int) -> int:
-        with self._connect() as connection:
-            row = connection.execute(
-                "SELECT COUNT(*) FROM cards WHERE deck_id = ?",
-                (deck_id,),
-            ).fetchone()
-        return row[0]
+        return self._deck_card_repository.count_cards_in_deck(deck_id)
 
     def count_new_cards_reviewed_on_day(
         self,
@@ -284,76 +267,25 @@ class CardRepository:
         day_start: datetime,
         day_end: datetime,
     ) -> int:
-        with self._connect() as connection:
-            row = connection.execute(
-                """
-                SELECT COUNT(*)
-                FROM (
-                    SELECT cards.id
-                    FROM cards
-                    JOIN review_logs ON review_logs.card_id = cards.id
-                    WHERE cards.deck_id = ?
-                      AND review_logs.undone_at IS NULL
-                    GROUP BY cards.id
-                    HAVING MIN(review_logs.reviewed_at) >= ?
-                       AND MIN(review_logs.reviewed_at) < ?
-                )
-                """,
-                (
-                    deck_id,
-                    serialize_datetime(day_start),
-                    serialize_datetime(day_end),
-                ),
-            ).fetchone()
-        return row[0]
+        return self._deck_card_repository.count_new_cards_reviewed_on_day(
+            deck_id=deck_id,
+            day_start=day_start,
+            day_end=day_end,
+        )
 
     def query_due_learned_cards(self, *, deck_id: int, now: datetime) -> list[CardRecord]:
-        with self._connect() as connection:
-            rows = connection.execute(
-                """
-                SELECT cards.*
-                FROM cards
-                WHERE cards.deck_id = ?
-                  AND cards.due_at IS NOT NULL
-                  AND cards.due_at <= ?
-                  AND EXISTS (
-                      SELECT 1
-                      FROM review_logs
-                      WHERE review_logs.card_id = cards.id
-                        AND review_logs.undone_at IS NULL
-                  )
-                ORDER BY cards.due_at, cards.id
-                """,
-                (deck_id, serialize_datetime(now)),
-            ).fetchall()
-        return [row_to_card(row) for row in rows]
+        return self._deck_card_repository.query_due_learned_cards(deck_id=deck_id, now=now)
 
     def query_new_cards(self, *, deck_id: int) -> list[CardRecord]:
-        with self._connect() as connection:
-            rows = connection.execute(
-                """
-                SELECT cards.*
-                FROM cards
-                WHERE cards.deck_id = ?
-                  AND NOT EXISTS (
-                      SELECT 1
-                      FROM review_logs
-                      WHERE review_logs.card_id = cards.id
-                        AND review_logs.undone_at IS NULL
-                  )
-                ORDER BY cards.id
-                """,
-                (deck_id,),
-            ).fetchall()
-        return [row_to_card(row) for row in rows]
+        return self._deck_card_repository.query_new_cards(deck_id=deck_id)
 
     def query_due_cards(self, now: datetime) -> list[CardRecord]:
         with self._connect() as connection:
             rows = connection.execute(
-                """
-                SELECT * FROM cards
-                WHERE due_at IS NOT NULL AND due_at <= ?
-                ORDER BY due_at, id
+                f"""
+                {CARD_SELECT}
+                WHERE cards.due_at IS NOT NULL AND cards.due_at <= ?
+                ORDER BY cards.due_at, cards.id
                 """,
                 (serialize_datetime(now),),
             ).fetchall()
@@ -363,7 +295,11 @@ class CardRepository:
         needle = query.casefold()
         with self._connect() as connection:
             rows = connection.execute(
-                "SELECT * FROM cards ORDER BY lemma, id LIMIT ? OFFSET ?",
+                f"""
+                {CARD_SELECT}
+                ORDER BY cards.lemma, cards.id
+                LIMIT ? OFFSET ?
+                """,
                 (limit, offset),
             ).fetchall()
         matches = [row_to_card(row) for row in rows if matches_query(row, needle)]
@@ -371,6 +307,46 @@ class CardRepository:
 
     def connect(self) -> sqlite3.Connection:
         return self._connect()
+
+    def _update_card_fields(
+        self,
+        *,
+        card_id: int,
+        identity_key: str | None,
+        lemma: str,
+        translation: str,
+        notes: str,
+        metadata: dict[str, Any],
+        connection: sqlite3.Connection | None = None,
+    ) -> None:
+        identity_sql = ", identity_key = ?" if identity_key is not None else ""
+        lemma_sql = build_lemma_key(lemma)
+        params: list[Any] = [
+            lemma_sql,
+            lemma,
+            translation,
+            notes,
+            dump_json(metadata),
+            serialize_datetime(utc_now()),
+        ]
+        if identity_key is not None:
+            params.append(identity_key)
+        params.append(card_id)
+        with self._use_connection(connection) as active_connection:
+            active_connection.execute(
+                f"""
+                UPDATE cards
+                SET
+                    lemma_key = ?,
+                    lemma = ?,
+                    translation = ?,
+                    notes = ?,
+                    metadata_json = ?,
+                    updated_at = ?{identity_sql}
+                WHERE id = ?
+                """,
+                tuple(params),
+            )
 
     def _fetch_one(
         self,
