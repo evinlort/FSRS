@@ -15,6 +15,7 @@ from czech_vocab.services.deck_population_service import (
     AvailablePoolCard,
     DeckPopulationSelection,
     DeckPopulationService,
+    DeckRandomCreateResult,
 )
 from czech_vocab.services.deck_settings_service import DeckSettingsService
 from czech_vocab.services.import_service import ImportPreview, ImportResult, ImportService
@@ -37,6 +38,7 @@ __all__ = [
     "DashboardData",
     "DashboardService",
     "AvailablePoolCard",
+    "DeckRandomCreateResult",
     "DeckPopulationSelection",
     "DeckPopulationService",
     "DeckSettingsService",

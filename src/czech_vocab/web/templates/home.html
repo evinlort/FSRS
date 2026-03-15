@@ -11,9 +11,10 @@
   {% if dashboard.total_cards == 0 %}
     <section class="panel panel--accent">
       <h2 class="panel__title">Начать работу</h2>
-      <p>Пока нет карточек. Сначала импортируйте слова, чтобы появилась колода для повторения.</p>
+      <p>Пока нет карточек в колодах. Импортируйте слова в глобальную базу или соберите новую колоду из уже доступных карточек.</p>
       <div class="action-row">
         <a class="button button--primary" href="{{ url_for('main.import_page') }}">Импортировать слова</a>
+        <a class="button" href="{{ url_for('main.new_deck_page') }}">Создать колоду</a>
       </div>
     </section>
   {% else %}
@@ -43,6 +44,9 @@
 
   <section class="panel">
     <h2 class="panel__title">Колоды</h2>
+    <div class="action-row">
+      <a class="button" href="{{ url_for('main.new_deck_page') }}">Создать колоду</a>
+    </div>
     {% if dashboard.deck_summaries %}
       <ul class="summary-list">
         {% for deck in dashboard.deck_summaries %}

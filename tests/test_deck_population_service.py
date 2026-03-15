@@ -147,6 +147,66 @@ def test_draft_lifecycle_persists_selection_state_server_side(tmp_path: Path) ->
     assert service.get_draft(updated.token) is None
 
 
+def test_create_random_deck_assigns_available_cards_and_can_update_default_count(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "deck-population.sqlite3"
+    initialize_database(database_path)
+    service = DeckPopulationService(database_path, sampler=pick_last_cards)
+    settings = DeckSettingsService(database_path)
+
+    create_card(database_path, "auto", "машина", deck_id=None)
+    create_card(database_path, "dum", "дом", deck_id=None)
+    create_card(database_path, "kniha", "книга", deck_id=None)
+
+    result = service.create_random_deck(
+        deck_name="  Глаголы  ",
+        requested_count=2,
+        save_default_count=True,
+    )
+
+    decks = settings.list_decks()
+    created = next(deck for deck in decks if deck.id == result.deck_id)
+    assert created.name == "Глаголы"
+    assert result.assigned_count == 2
+    assert result.insufficient_pool is False
+    assert settings.get_app_settings().default_target_deck_card_count == 2
+    assert settings.list_decks()[0].name == "Основная"
+
+
+def test_create_random_deck_uses_smaller_available_pool_and_blocks_invalid_state(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "deck-population.sqlite3"
+    initialize_database(database_path)
+    service = DeckPopulationService(database_path, sampler=pick_last_cards)
+
+    create_card(database_path, "auto", "машина", deck_id=None)
+
+    result = service.create_random_deck(
+        deck_name="Путешествия",
+        requested_count=4,
+        save_default_count=False,
+    )
+
+    assert result.assigned_count == 1
+    assert result.insufficient_pool is True
+
+    with pytest.raises(ValueError, match="already exists"):
+        service.create_random_deck(
+            deck_name="Путешествия",
+            requested_count=1,
+            save_default_count=False,
+        )
+
+    with pytest.raises(ValueError, match="available"):
+        service.create_random_deck(
+            deck_name="Ещё одна колода",
+            requested_count=1,
+            save_default_count=False,
+        )
+
+
 def create_card(database_path: Path, lemma: str, translation: str, *, deck_id: int | None):
     repository = CardRepository(database_path)
     now = datetime(2026, 3, 15, 12, 0, tzinfo=UTC)

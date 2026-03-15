@@ -22,6 +22,7 @@ from czech_vocab.services import (
     CardEditMetadataRow,
     CardEditService,
     DashboardService,
+    DeckPopulationService,
     DeckSettingsService,
     ImportService,
     SettingsPageService,
@@ -48,6 +49,33 @@ def favicon():
 @main_bp.get("/import")
 def import_page() -> str:
     return _render_import_page()
+
+
+@main_bp.get("/decks/new")
+def new_deck_page() -> str:
+    return _render_new_deck_page()
+
+
+@main_bp.post("/decks/new")
+def create_deck_page():
+    service = DeckPopulationService(current_app.config["DATABASE_PATH"])
+    form_state = _new_deck_form_state(service)
+    errors = _validate_new_deck_form(form_state)
+    if errors:
+        return _render_new_deck_page(form_state=form_state, errors=errors), 400
+    try:
+        result = service.create_random_deck(
+            deck_name=form_state["deck_name"],
+            requested_count=form_state["requested_count"],
+            save_default_count=form_state["save_default_count"],
+        )
+    except ValueError as exc:
+        return _render_new_deck_page(
+            form_state=form_state,
+            errors={"form": _new_deck_error_message(str(exc))},
+        ), 400
+    flash(_deck_created_flash(result.deck_name, result.assigned_count), "success")
+    return redirect(url_for("main.home"))
 
 
 @main_bp.post("/import/preview")
@@ -252,6 +280,29 @@ def _render_import_page(
 def _render_settings_page() -> str:
     service = SettingsPageService(current_app.config["DATABASE_PATH"])
     return render_template("settings.html", settings_page=service.get_page_data())
+
+
+def _render_new_deck_page(
+    *,
+    form_state: dict[str, object] | None = None,
+    errors: dict[str, str] | None = None,
+) -> str:
+    service = DeckPopulationService(current_app.config["DATABASE_PATH"])
+    default_count = service.get_default_target_count()
+    state = form_state or {
+        "deck_name": "",
+        "requested_count": default_count,
+        "mode": "random",
+        "save_default_count": False,
+    }
+    return render_template(
+        "deck_create.html",
+        form_state=state,
+        available_count=service.count_available_cards(),
+        errors=errors or {},
+    )
+
+
 def _settings_form_payload(service: SettingsPageService) -> dict[str, object]:
     page_data = service.get_page_data()
     return {
@@ -275,6 +326,58 @@ def _settings_form_payload(service: SettingsPageService) -> dict[str, object]:
             for deck in page_data.decks
         },
     }
+
+
+def _new_deck_form_state(service: DeckPopulationService) -> dict[str, object]:
+    requested_raw = request.form.get("requested_count", "").strip()
+    default_count = service.get_default_target_count()
+    return {
+        "deck_name": request.form.get("deck_name", "").strip(),
+        "requested_count_raw": requested_raw,
+        "requested_count": _parse_positive_int(requested_raw, default_count),
+        "mode": request.form.get("mode", "random"),
+        "save_default_count": request.form.get("save_default_count") == "on",
+    }
+
+
+def _validate_new_deck_form(form_state: dict[str, object]) -> dict[str, str]:
+    errors: dict[str, str] = {}
+    if not form_state["deck_name"]:
+        errors["deck_name"] = "Введите название колоды."
+    if form_state["mode"] != "random":
+        errors["form"] = "Сейчас доступно только случайное заполнение."
+    if not _is_positive_int(form_state["requested_count_raw"]):
+        errors["requested_count"] = "Количество карточек должно быть целым числом 1 или больше."
+    return errors
+
+
+def _parse_positive_int(raw_value: str, default_value: int) -> int:
+    if not raw_value:
+        return default_value
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        return default_value
+    return parsed
+
+
+def _is_positive_int(raw_value: str) -> bool:
+    try:
+        return int(raw_value) >= 1
+    except ValueError:
+        return False
+
+
+def _new_deck_error_message(message: str) -> str:
+    if message == "Deck already exists.":
+        return "Колода с таким названием уже существует."
+    if message == "No available cards.":
+        return "Свободных карточек пока нет. Сначала импортируйте слова в глобальную базу."
+    return "Не удалось создать колоду. Проверьте данные и попробуйте снова."
+
+
+def _deck_created_flash(deck_name: str, assigned_count: int) -> str:
+    return f"Колода «{deck_name}» создана. Добавлено {assigned_count} карточек."
 
 
 def _preview_error_context(error_message: str) -> tuple[str, str]:

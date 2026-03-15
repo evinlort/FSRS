@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Новая колода{% endblock %}
+{% block page_eyebrow %}Колоды{% endblock %}
+{% block page_title %}Создать колоду{% endblock %}
+{% block page_intro %}
+  <p>Соберите новую колоду из свободных карточек глобальной базы. На этом шаге доступно случайное заполнение.</p>
+{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <p><strong>Свободных карточек в базе:</strong> {{ available_count }}</p>
+    {% if errors.form %}
+      <div class="state-panel state-panel--error">
+        <h2 class="state-panel__title">Колоду создать не удалось</h2>
+        <p>{{ errors.form }}</p>
+        {% if available_count == 0 %}
+          <div class="action-row">
+            <a class="button button--primary" href="{{ url_for('main.import_page') }}">Импортировать слова</a>
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
+    <form method="post" action="{{ url_for('main.create_deck_page') }}" data-busy-form>
+      <input type="hidden" name="mode" value="random">
+
+      <label class="field-label" for="deck_name">Название колоды</label>
+      <input id="deck_name" name="deck_name" value="{{ form_state.deck_name }}">
+      {% if errors.deck_name %}
+        <p class="field-error">{{ errors.deck_name }}</p>
+      {% endif %}
+
+      <label class="field-label" for="requested_count">Сколько карточек добавить</label>
+      <input
+        id="requested_count"
+        name="requested_count"
+        inputmode="numeric"
+        value="{{ form_state.requested_count_raw or form_state.requested_count }}"
+      >
+      {% if errors.requested_count %}
+        <p class="field-error">{{ errors.requested_count }}</p>
+      {% endif %}
+
+      <label class="checkbox-row">
+        <input type="checkbox" name="save_default_count"{% if form_state.save_default_count %} checked{% endif %}>
+        <span>Сохранить это количество как новое значение по умолчанию</span>
+      </label>
+
+      <div class="action-row">
+        <button class="button button--primary" type="submit" data-busy-label="Создаём колоду...">
+          Создать колоду
+        </button>
+        <a class="button" href="{{ url_for('main.home') }}">Вернуться на главную</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

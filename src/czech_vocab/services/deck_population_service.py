@@ -1,13 +1,17 @@
+import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from random import sample
 from typing import Callable
 
 from czech_vocab.repositories import (
+    AppSettingsRepository,
     CardRecord,
     CardRepository,
+    DeckCardRepository,
     DeckPopulationDraftRecord,
     DeckPopulationDraftRepository,
+    DeckRepository,
 )
 from czech_vocab.services.deck_settings_service import DeckSettingsService
 
@@ -35,6 +39,16 @@ class DeckPopulationSelection:
     insufficient_pool: bool
 
 
+@dataclass(frozen=True)
+class DeckRandomCreateResult:
+    deck_id: int
+    deck_name: str
+    requested_count: int
+    assigned_count: int
+    insufficient_pool: bool
+    saved_default_count: bool
+
+
 class DeckPopulationService:
     def __init__(
         self,
@@ -43,12 +57,18 @@ class DeckPopulationService:
         sampler: Callable[[list[CardRecord], int], list[CardRecord]] | None = None,
     ) -> None:
         self._repository = CardRepository(database_path)
+        self._deck_repository = DeckRepository(database_path)
+        self._deck_card_repository = DeckCardRepository(database_path)
+        self._settings_repository = AppSettingsRepository(database_path)
         self._draft_repository = DeckPopulationDraftRepository(database_path)
         self._deck_settings = DeckSettingsService(database_path)
         self._sampler = sampler or _sample_cards
 
     def get_default_target_count(self) -> int:
         return self._deck_settings.get_app_settings().default_target_deck_card_count
+
+    def count_available_cards(self) -> int:
+        return len(self._repository.list_available_cards())
 
     def search_available_cards(self, *, search_in: str, query: str) -> list[AvailablePoolCard]:
         scope = _validate_search_scope(search_in)
@@ -150,6 +170,63 @@ class DeckPopulationService:
 
     def delete_draft(self, token: str) -> None:
         self._draft_repository.delete_draft(token)
+
+    def create_random_deck(
+        self,
+        *,
+        deck_name: str,
+        requested_count: int,
+        save_default_count: bool,
+    ) -> DeckRandomCreateResult:
+        clean_name = deck_name.strip()
+        if not clean_name:
+            raise ValueError("Deck name is required.")
+        if self._deck_repository.get_deck_by_name(clean_name) is not None:
+            raise ValueError("Deck already exists.")
+
+        selection = self.build_selection(
+            requested_count=requested_count,
+            manual_card_ids=[],
+            mode="random",
+        )
+        if not selection.cards:
+            raise ValueError("No available cards.")
+
+        settings = self._deck_settings.get_app_settings()
+        with self._repository.connect() as connection:
+            created_deck = self._create_deck_record(clean_name, settings, connection)
+            for card in selection.cards:
+                self._deck_card_repository.assign_card_to_deck(
+                    card_id=card.card_id,
+                    deck_id=created_deck.id,
+                    connection=connection,
+                )
+            if save_default_count:
+                self._settings_repository.update_settings(
+                    default_desired_retention=settings.default_desired_retention,
+                    default_daily_new_limit=settings.default_daily_new_limit,
+                    default_target_deck_card_count=selection.requested_count,
+                    connection=connection,
+                )
+        return DeckRandomCreateResult(
+            deck_id=created_deck.id,
+            deck_name=created_deck.name,
+            requested_count=selection.requested_count,
+            assigned_count=len(selection.cards),
+            insufficient_pool=selection.insufficient_pool,
+            saved_default_count=save_default_count,
+        )
+
+    def _create_deck_record(self, name, settings, connection: sqlite3.Connection):
+        try:
+            return self._deck_repository.create_deck(
+                name=name,
+                desired_retention=settings.default_desired_retention,
+                daily_new_limit=settings.default_daily_new_limit,
+                connection=connection,
+            )
+        except sqlite3.IntegrityError as exc:
+            raise ValueError("Deck already exists.") from exc
 
 
 def _matches_search(card: CardRecord, *, search_in: str, needle: str) -> bool:

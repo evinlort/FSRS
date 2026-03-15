@@ -117,6 +117,14 @@
   - inputs: `preview_token`
   - DB access: `import_previews`, `cards`
 
+- `/decks/new`
+  - methods: `GET`, `POST`
+  - handlers: `new_deck_page()`, `create_deck_page()`
+  - template: [`deck_create.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/deck_create.html)
+  - service: [`DeckPopulationService`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/deck_population_service.py)
+  - inputs: `deck_name`, `requested_count`, `mode`, `save_default_count`
+  - DB access: `app_settings`, `decks`, `cards`, `deck_cards`
+
 - `/review`
   - methods: `GET`
   - handler: `review_page()`
@@ -279,6 +287,7 @@
     - searches the available global-card pool
     - validates random/manual/mixed population rules
     - persists manual-selection drafts server-side through `DeckPopulationDraftRepository`
+    - creates random-filled decks and can save the requested count back to global settings
 
 - Review state transitions
   - queue selection: `StudyService.get_queue_state()`
@@ -376,6 +385,15 @@
   - tables affected: read-only `cards`, `deck_cards`, read/write `deck_population_drafts`, read-only `app_settings`
   - result: future create/add routes can use one source of truth for pool selection and server-side draft state
 
+- Random deck creation flow
+  1. Dashboard links to `GET /decks/new`
+  2. The page preloads `requested_count` from `app_settings.default_target_deck_card_count`
+  3. `POST /decks/new` validates deck name/count and calls `DeckPopulationService.create_random_deck()`
+  4. The service creates the deck, assigns random available cards through `deck_cards`, and optionally updates the global default count
+  5. The app redirects back to `/` with a success flash
+  - tables affected: `app_settings`, `decks`, `deck_cards`, read-only `cards`
+  - result: a new deck exists and immediately contains linked cards from the global base
+
 ## 9. Template/UI map
 
 - Base layout
@@ -384,6 +402,7 @@
 
 - Major page templates
   - dashboard: `home.html`
+  - random deck creation: `deck_create.html`
   - import: `import.html`
   - review: `review.html`
   - cards list: `cards.html`
@@ -428,6 +447,7 @@
 
 - Persistence and decks/settings
   - [`test_card_repository.py`](/home/egrebnev/Dev/ai/FSRS/tests/test_card_repository.py)
+  - [`test_deck_creation_flow.py`](/home/egrebnev/Dev/ai/FSRS/tests/test_deck_creation_flow.py)
   - [`test_deck_settings_service.py`](/home/egrebnev/Dev/ai/FSRS/tests/test_deck_settings_service.py)
   - [`test_deck_population_service.py`](/home/egrebnev/Dev/ai/FSRS/tests/test_deck_population_service.py)
   - [`test_settings_service.py`](/home/egrebnev/Dev/ai/FSRS/tests/test_settings_service.py)
