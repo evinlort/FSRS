@@ -49,6 +49,7 @@ class DeckRecord:
 class AppSettingsRecord:
     default_desired_retention: float
     default_daily_new_limit: int
+    default_target_deck_card_count: int
     created_at: datetime
     updated_at: datetime
 
@@ -87,6 +88,10 @@ class UndoReviewSnapshot:
 def build_identity_key(lemma: str, translation: str) -> str:
     material = "\0".join((_normalize_identity_text(lemma), _normalize_identity_text(translation)))
     return sha256(material.encode("utf-8")).hexdigest()
+
+
+def build_lemma_key(lemma: str) -> str:
+    return _normalize_identity_text(lemma)
 
 
 def dump_json(value: dict[str, Any]) -> str:
@@ -134,6 +139,7 @@ def row_to_settings(row: sqlite3.Row) -> AppSettingsRecord:
     return AppSettingsRecord(
         default_desired_retention=row["default_desired_retention"],
         default_daily_new_limit=row["default_daily_new_limit"],
+        default_target_deck_card_count=row["default_target_deck_card_count"],
         created_at=parse_datetime(row["created_at"]),
         updated_at=parse_datetime(row["updated_at"]),
     )

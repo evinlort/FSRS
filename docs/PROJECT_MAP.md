@@ -24,6 +24,7 @@
   - deck-aware review queue rules
   - import preview persistence
 - Major missing or partial areas:
+  - global-base schema refactor has started: `cards` are now schema-level global rows with `deck_cards` links, but most repositories/services still assume the older deck-owned access pattern and are scheduled to be migrated next
   - no optimizer or FSRS parameter fitting
   - no auth or multi-user support
   - no delete flows for cards/decks
@@ -38,7 +39,7 @@
 - [`src/czech_vocab/services`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services)
   - application-layer orchestration for dashboard, import, review, cards, stats, and settings.
 - [`src/czech_vocab/repositories`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/repositories)
-  - SQLite schema bootstrap plus repositories for cards, decks, settings, and import previews.
+  - SQLite schema bootstrap, schema migrations, and repositories for cards, decks, settings, and import previews.
 - [`src/czech_vocab/domain`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/domain)
   - FSRS scheduler adapter.
 - [`src/czech_vocab/importers`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/importers)
@@ -179,18 +180,30 @@
   - read by: dashboard, import, review, cards, stats, settings
 
 - `app_settings`
-  - role: global defaults for new decks and stats “all decks” retention display
-  - important fields: `default_desired_retention`, `default_daily_new_limit`
+  - role: global defaults for new decks, stats “all decks” retention display, and deck-population defaults
+  - important fields: `default_desired_retention`, `default_daily_new_limit`, `default_target_deck_card_count`
   - written by: `AppSettingsRepository`, `DeckSettingsService`, `SettingsPageService`
   - read by: settings and deck creation flows
 
 - `cards`
-  - role: persistent card content + scheduling state
-  - important fields: `deck_id`, `identity_key`, `lemma`, `translation`, `notes`, `metadata_json`, `fsrs_state_json`, `due_at`, `last_review_at`
-  - relation: `deck_id -> decks.id`
-  - uniqueness: `(deck_id, identity_key)`
+  - role: persistent global card content + scheduling state
+  - important fields: `lemma_key`, `identity_key`, `lemma`, `translation`, `notes`, `metadata_json`, `fsrs_state_json`, `due_at`, `last_review_at`
+  - uniqueness: `lemma_key`
   - written by: import, review scheduling updates, card edit
   - read by: review queue, dashboard, cards list, stats
+
+- `deck_cards`
+  - role: active assignment link between a global card and one deck
+  - important fields: `card_id`, `deck_id`, `created_at`
+  - relations: `card_id -> cards.id`, `deck_id -> decks.id`
+  - uniqueness: `card_id` is unique so a card can belong to at most one active deck
+  - written by: currently only schema migration; population flows are planned next
+  - read by: not yet the main runtime source of truth; consumer migration is the next planned implementation step
+
+- `deck_population_drafts`
+  - role: server-side draft state for manual deck population flows
+  - important fields: `token`, `flow_type`, `deck_id`, `deck_name`, `requested_count`, `mode`, `selected_card_ids_json`
+  - written by: no runtime writer yet; introduced by schema as a dependency for planned manual selection flows
 
 - `review_logs`
   - role: immutable review history with soft undo marker
@@ -206,9 +219,10 @@
   - consumed/deleted by: `ImportService.confirm_preview()`
 
 - Schema ownership:
-  - source of truth: [`schema.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/repositories/schema.py)
+  - source of truth: [`schema.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/repositories/schema.py) and [`schema_migrations.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/repositories/schema_migrations.py)
   - there is no separate migration tool
-  - bootstrap includes one ad hoc cards migration for pre-deck databases and one `review_logs.undone_at` additive migration
+  - bootstrap now includes additive migrations for `review_logs.undone_at` and `app_settings.default_target_deck_card_count`
+  - bootstrap also includes an ad hoc rebuild from legacy deck-owned `cards` rows to global `cards` plus `deck_cards`, with fail-fast Czech-duplicate detection
 
 ## 7. Domain and service relations
 
@@ -221,7 +235,7 @@
   - `DeckRepository`: decks
   - `AppSettingsRepository`: app settings
   - `ImportPreviewRepository`: import previews
-  - [`records.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/repositories/records.py): dataclasses, JSON/datetime serialization, identity key building
+  - [`records.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/repositories/records.py): dataclasses, JSON/datetime serialization, identity key building, Czech `lemma_key` normalization
 
 - Service relations
   - `ImportService`
