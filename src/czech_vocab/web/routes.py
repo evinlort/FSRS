@@ -22,6 +22,7 @@ from czech_vocab.services import (
     CardEditMetadataRow,
     CardEditService,
     DashboardService,
+    DeckCreateService,
     DeckPopulationService,
     DeckSettingsService,
     ImportService,
@@ -63,6 +64,21 @@ def create_deck_page():
     errors = _validate_new_deck_form(form_state)
     if errors:
         return _render_new_deck_page(form_state=form_state, errors=errors), 400
+    if form_state["mode"] in {"manual", "mixed"}:
+        draft_service = DeckCreateService(current_app.config["DATABASE_PATH"])
+        try:
+            token = draft_service.start_create_flow(
+                deck_name=form_state["deck_name"],
+                requested_count=form_state["requested_count"],
+                mode=form_state["mode"],
+                save_default_count=form_state["save_default_count"],
+            )
+        except ValueError as exc:
+            return _render_new_deck_page(
+                form_state=form_state,
+                errors={"form": _new_deck_error_message(str(exc))},
+            ), 400
+        return redirect(url_for("main.deck_draft_selection_page", token=token))
     try:
         result = service.create_random_deck(
             deck_name=form_state["deck_name"],
@@ -76,6 +92,55 @@ def create_deck_page():
         ), 400
     flash(_deck_created_flash(result.deck_name, result.assigned_count), "success")
     return redirect(url_for("main.home"))
+
+
+@main_bp.get("/deck-drafts/<token>/select")
+def deck_draft_selection_page(token: str):
+    service = DeckCreateService(current_app.config["DATABASE_PATH"])
+    try:
+        page_data = service.get_draft_page(token)
+    except LookupError:
+        return "Draft not found", 404
+    return _render_deck_draft_page(page_data)
+
+
+@main_bp.post("/deck-drafts/<token>/select")
+def update_deck_draft_selection_page(token: str):
+    service = DeckCreateService(current_app.config["DATABASE_PATH"])
+    action = request.form.get("action", "update")
+    selected_ids = _selected_card_ids_from_request()
+    search_in = request.form.get("search_in", "czech")
+    query = request.form.get("q", "")
+    try:
+        if action == "confirm":
+            result = service.confirm_create_flow(
+                token=token,
+                selected_card_ids=selected_ids,
+                search_in=search_in,
+                query=query,
+            )
+            flash(_deck_created_flash(result.deck_name, result.assigned_count), "success")
+            return redirect(url_for("main.home"))
+        page_data = service.update_draft_page(
+            token=token,
+            selected_card_ids=selected_ids,
+            search_in=search_in,
+            query=query,
+        )
+    except LookupError:
+        return "Draft not found", 404
+    except ValueError as exc:
+        try:
+            page_data = service.update_draft_page(
+                token=token,
+                selected_card_ids=selected_ids[:0] if "exceed" in str(exc) else selected_ids,
+                search_in=search_in,
+                query=query,
+            )
+        except LookupError:
+            return "Draft not found", 404
+        return _render_deck_draft_page(page_data, error=_draft_error_message(str(exc))), 400
+    return _render_deck_draft_page(page_data)
 
 
 @main_bp.post("/import/preview")
@@ -303,6 +368,10 @@ def _render_new_deck_page(
     )
 
 
+def _render_deck_draft_page(page_data, error: str | None = None) -> str:
+    return render_template("deck_select.html", draft_page=page_data, error=error)
+
+
 def _settings_form_payload(service: SettingsPageService) -> dict[str, object]:
     page_data = service.get_page_data()
     return {
@@ -344,8 +413,8 @@ def _validate_new_deck_form(form_state: dict[str, object]) -> dict[str, str]:
     errors: dict[str, str] = {}
     if not form_state["deck_name"]:
         errors["deck_name"] = "Введите название колоды."
-    if form_state["mode"] != "random":
-        errors["form"] = "Сейчас доступно только случайное заполнение."
+    if form_state["mode"] not in {"random", "manual", "mixed"}:
+        errors["form"] = "Выберите режим заполнения колоды."
     if not _is_positive_int(form_state["requested_count_raw"]):
         errors["requested_count"] = "Количество карточек должно быть целым числом 1 или больше."
     return errors
@@ -376,8 +445,30 @@ def _new_deck_error_message(message: str) -> str:
     return "Не удалось создать колоду. Проверьте данные и попробуйте снова."
 
 
+def _draft_error_message(message: str) -> str:
+    if "cannot exceed" in message:
+        return "Нельзя выбрать больше карточек, чем запрошено."
+    if "empty" in message:
+        return "Новая колода не может быть пустой."
+    if "available" in message:
+        return "Выбранные карточки больше недоступны."
+    if "already exists" in message:
+        return "Колода с таким названием уже существует."
+    return "Не удалось применить выбор карточек."
+
+
 def _deck_created_flash(deck_name: str, assigned_count: int) -> str:
     return f"Колода «{deck_name}» создана. Добавлено {assigned_count} карточек."
+
+
+def _selected_card_ids_from_request() -> list[int]:
+    selected: list[int] = []
+    for raw_value in request.form.getlist("selected_card_ids"):
+        try:
+            selected.append(int(raw_value))
+        except ValueError:
+            continue
+    return selected
 
 
 def _preview_error_context(error_message: str) -> tuple[str, str]:

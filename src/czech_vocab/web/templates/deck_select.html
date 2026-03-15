@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Выбор карточек{% endblock %}
+{% block page_eyebrow %}Колоды{% endblock %}
+{% block page_title %}Выбор карточек для колоды{% endblock %}
+{% block page_intro %}
+  <p>Колода: {{ draft_page.deck_name }}. Выберите карточки вручную или подтвердите смешанное заполнение.</p>
+{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <p><strong>Выбрано {{ draft_page.selected_count }} из {{ draft_page.requested_count }}</strong></p>
+    {% if draft_page.warning_message %}
+      <div class="state-panel state-panel--warning">
+        <h2 class="state-panel__title">Выбрано меньше карточек, чем запрошено</h2>
+        <p>{{ draft_page.warning_message }}</p>
+      </div>
+    {% endif %}
+    {% if error %}
+      <div class="state-panel state-panel--error">
+        <h2 class="state-panel__title">Не удалось применить выбор</h2>
+        <p>{{ error }}</p>
+      </div>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('main.update_deck_draft_selection_page', token=draft_page.token) }}" data-busy-form>
+      <label class="field-label" for="search_in">Искать в</label>
+      <select id="search_in" name="search_in">
+        {% for value, label in [("czech", "Чешский"), ("russian", "Русский")] %}
+          <option value="{{ value }}"{% if draft_page.search_in == value %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+
+      <label class="field-label" for="q">Поиск</label>
+      <input id="q" name="q" value="{{ draft_page.query }}">
+
+      {% for card_id in draft_page.hidden_selected_ids %}
+        <input type="hidden" name="selected_card_ids" value="{{ card_id }}">
+      {% endfor %}
+
+      <ul class="summary-list">
+        {% for card in draft_page.cards %}
+          <li>
+            <label>
+              <input type="checkbox" name="selected_card_ids" value="{{ card.card_id }}"{% if card.selected %} checked{% endif %}>
+              <strong>{{ card.lemma }}</strong>
+              <span>{{ card.translation }}</span>
+            </label>
+          </li>
+        {% endfor %}
+      </ul>
+
+      <div class="action-row">
+        <button class="button" type="submit" name="action" value="update">Обновить выбор</button>
+        <button class="button button--primary" type="submit" name="action" value="confirm" data-busy-label="Создаём колоду...">
+          Создать колоду
+        </button>
+      </div>
+    </form>
+  </section>
+{% endblock %}

@@ -110,6 +110,159 @@ def test_create_deck_route_preserves_input_on_validation_error(client, app) -> N
     assert 'checked' in page
 
 
+def test_manual_mode_redirects_to_selection_page_and_supports_search(client, app) -> None:
+    database_path = app.config["DATABASE_PATH"]
+    first = create_global_card(database_path, "kniha", "книга")
+    create_global_card(database_path, "dum", "дом")
+    create_global_card(database_path, "lod", "лодка")
+
+    start_response = client.post(
+        "/decks/new",
+        data={
+            "deck_name": "Ручная",
+            "requested_count": "3",
+            "mode": "manual",
+        },
+    )
+
+    assert start_response.status_code == 302
+    assert "/deck-drafts/" in start_response.headers["Location"]
+    select_page = client.get(start_response.headers["Location"]).get_data(as_text=True)
+    assert 'name="search_in"' in select_page
+    assert 'name="q"' in select_page
+    assert f'value="{first.id}"' in select_page
+
+    update_response = client.post(
+        start_response.headers["Location"],
+        data={
+            "action": "update",
+            "search_in": "russian",
+            "q": "лод",
+            "selected_card_ids": [str(first.id)],
+        },
+    )
+
+    assert update_response.status_code == 200
+    updated_page = update_response.get_data(as_text=True)
+    assert "Выбрано 1 из 3" in updated_page
+    assert "лодка" in updated_page
+    assert "Колода будет создана с выбранным количеством карточек." in updated_page
+
+
+def test_manual_selection_can_create_deck_from_checked_cards_only(client, app) -> None:
+    database_path = app.config["DATABASE_PATH"]
+    first = create_global_card(database_path, "kniha", "книга")
+    second = create_global_card(database_path, "dum", "дом")
+    create_global_card(database_path, "lod", "лодка")
+
+    start_response = client.post(
+        "/decks/new",
+        data={
+            "deck_name": "Ручная",
+            "requested_count": "3",
+            "mode": "manual",
+        },
+    )
+
+    response = client.post(
+        start_response.headers["Location"],
+        data={
+            "action": "confirm",
+            "search_in": "czech",
+            "q": "",
+            "selected_card_ids": [str(first.id), str(second.id)],
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    page = response.get_data(as_text=True)
+    assert "Колода «Ручная» создана." in page
+    assert "2 карточек" in page
+
+    deck = DeckRepository(database_path).get_deck_by_name("Ручная")
+    assert deck is not None
+    with CardRepository(database_path).connect() as connection:
+        count = connection.execute(
+            "SELECT COUNT(*) FROM deck_cards WHERE deck_id = ?",
+            (deck.id,),
+        ).fetchone()[0]
+    assert count == 2
+
+
+def test_mixed_selection_creates_deck_with_manual_and_random_fill(client, app) -> None:
+    database_path = app.config["DATABASE_PATH"]
+    first = create_global_card(database_path, "kniha", "книга")
+    create_global_card(database_path, "dum", "дом")
+    create_global_card(database_path, "lod", "лодка")
+
+    start_response = client.post(
+        "/decks/new",
+        data={
+            "deck_name": "Смешанная",
+            "requested_count": "3",
+            "mode": "mixed",
+        },
+    )
+
+    response = client.post(
+        start_response.headers["Location"],
+        data={
+            "action": "confirm",
+            "search_in": "czech",
+            "q": "",
+            "selected_card_ids": [str(first.id)],
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    page = response.get_data(as_text=True)
+    assert "Колода «Смешанная» создана." in page
+    assert "3 карточек" in page
+
+    deck = DeckRepository(database_path).get_deck_by_name("Смешанная")
+    assert deck is not None
+    with CardRepository(database_path).connect() as connection:
+        count = connection.execute(
+            "SELECT COUNT(*) FROM deck_cards WHERE deck_id = ?",
+            (deck.id,),
+        ).fetchone()[0]
+    assert count == 3
+
+
+def test_selection_page_rejects_too_many_choices(client, app) -> None:
+    database_path = app.config["DATABASE_PATH"]
+    cards = [
+        create_global_card(database_path, "kniha", "книга"),
+        create_global_card(database_path, "dum", "дом"),
+        create_global_card(database_path, "lod", "лодка"),
+    ]
+
+    start_response = client.post(
+        "/decks/new",
+        data={
+            "deck_name": "Ручная",
+            "requested_count": "2",
+            "mode": "manual",
+        },
+    )
+
+    response = client.post(
+        start_response.headers["Location"],
+        data={
+            "action": "confirm",
+            "search_in": "czech",
+            "q": "",
+            "selected_card_ids": [str(card.id) for card in cards],
+        },
+    )
+
+    assert response.status_code == 400
+    page = response.get_data(as_text=True)
+    assert "Нельзя выбрать больше карточек, чем запрошено." in page
+
+
 def create_global_card(database_path, lemma: str, translation: str):
     repository = CardRepository(database_path)
     now = datetime(2026, 3, 15, 12, 0, tzinfo=UTC)

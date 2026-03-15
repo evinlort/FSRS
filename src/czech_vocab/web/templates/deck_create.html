@@ -4,7 +4,7 @@
 {% block page_eyebrow %}Колоды{% endblock %}
 {% block page_title %}Создать колоду{% endblock %}
 {% block page_intro %}
-  <p>Соберите новую колоду из свободных карточек глобальной базы. На этом шаге доступно случайное заполнение.</p>
+  <p>Соберите новую колоду из свободных карточек глобальной базы: случайно, вручную или в смешанном режиме.</p>
 {% endblock %}
 
 {% block content %}
@@ -22,13 +22,21 @@
       </div>
     {% endif %}
     <form method="post" action="{{ url_for('main.create_deck_page') }}" data-busy-form>
-      <input type="hidden" name="mode" value="random">
-
       <label class="field-label" for="deck_name">Название колоды</label>
       <input id="deck_name" name="deck_name" value="{{ form_state.deck_name }}">
       {% if errors.deck_name %}
         <p class="field-error">{{ errors.deck_name }}</p>
       {% endif %}
+
+      <fieldset>
+        <legend class="field-label">Режим заполнения</legend>
+        {% for value, label in [("random", "Случайно"), ("manual", "Вручную"), ("mixed", "Смешанно")] %}
+          <label class="checkbox-row">
+            <input type="radio" name="mode" value="{{ value }}"{% if form_state.mode == value %} checked{% endif %}>
+            <span>{{ label }}</span>
+          </label>
+        {% endfor %}
+      </fieldset>
 
       <label class="field-label" for="requested_count">Сколько карточек добавить</label>
       <input

@@ -24,9 +24,10 @@
   - deck-aware review queue rules
   - import preview persistence into a global unassigned word base
   - runtime deck membership resolved through `deck_cards` joins rather than `cards.deck_id`
-  - deck-population service foundation for available-pool search, random/manual/mixed selection rules, and server-side draft persistence
+  - deck creation with random, manual, and mixed selection flows backed by server-side SQLite drafts
 - Major missing or partial areas:
-  - deck creation/population flows are planned but not implemented yet, so imported words remain unassigned until later steps link them to decks
+  - adding cards to an existing deck is still planned but not implemented
+  - imported words remain unassigned until a deck-creation or future add-to-deck flow links them
   - no optimizer or FSRS parameter fitting
   - no auth or multi-user support
   - no delete flows for cards/decks
@@ -121,9 +122,17 @@
   - methods: `GET`, `POST`
   - handlers: `new_deck_page()`, `create_deck_page()`
   - template: [`deck_create.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/deck_create.html)
-  - service: [`DeckPopulationService`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/deck_population_service.py)
+  - services: [`DeckPopulationService`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/deck_population_service.py), [`DeckCreateService`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/deck_create_service.py)
   - inputs: `deck_name`, `requested_count`, `mode`, `save_default_count`
   - DB access: `app_settings`, `decks`, `cards`, `deck_cards`
+
+- `/deck-drafts/<token>/select`
+  - methods: `GET`, `POST`
+  - handlers: `deck_draft_selection_page()`, `update_deck_draft_selection_page()`
+  - template: [`deck_select.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/deck_select.html)
+  - service: `DeckCreateService`
+  - inputs: `action`, `search_in`, `q`, repeated `selected_card_ids`
+  - DB access: `deck_population_drafts`, read-only `cards`, `deck_cards`, and on confirm also `decks`, `app_settings`
 
 - `/review`
   - methods: `GET`
@@ -288,6 +297,10 @@
     - validates random/manual/mixed population rules
     - persists manual-selection drafts server-side through `DeckPopulationDraftRepository`
     - creates random-filled decks and can save the requested count back to global settings
+  - `DeckCreateService`
+    - starts manual/mixed create flows
+    - turns persisted drafts into selection-page view models
+    - validates draft updates and final manual/mixed creation
 
 - Review state transitions
   - queue selection: `StudyService.get_queue_state()`
@@ -394,6 +407,16 @@
   - tables affected: `app_settings`, `decks`, `deck_cards`, read-only `cards`
   - result: a new deck exists and immediately contains linked cards from the global base
 
+- Manual and mixed deck creation flow
+  1. `POST /decks/new` with mode `manual` or `mixed` starts a server-side draft through `DeckCreateService`
+  2. The app redirects to `GET /deck-drafts/<token>/select`
+  3. The selection page filters the available pool by Czech or Russian search and preserves checkbox state in SQLite
+  4. `POST /deck-drafts/<token>/select` either refreshes the visible selection or confirms creation
+  5. Manual mode creates a deck from checked cards only; mixed mode fills the remainder randomly from the still-available pool
+  6. The app redirects back to `/` with a success flash
+  - tables affected: `deck_population_drafts`, `decks`, `deck_cards`, optionally `app_settings`, read-only `cards`
+  - result: a new deck exists with manually selected or mixed selected-plus-random cards
+
 ## 9. Template/UI map
 
 - Base layout
@@ -403,6 +426,7 @@
 - Major page templates
   - dashboard: `home.html`
   - random deck creation: `deck_create.html`
+  - deck manual/mixed selection: `deck_select.html`
   - import: `import.html`
   - review: `review.html`
   - cards list: `cards.html`
@@ -447,6 +471,7 @@
 
 - Persistence and decks/settings
   - [`test_card_repository.py`](/home/egrebnev/Dev/ai/FSRS/tests/test_card_repository.py)
+  - [`test_deck_create_service.py`](/home/egrebnev/Dev/ai/FSRS/tests/test_deck_create_service.py)
   - [`test_deck_creation_flow.py`](/home/egrebnev/Dev/ai/FSRS/tests/test_deck_creation_flow.py)
   - [`test_deck_settings_service.py`](/home/egrebnev/Dev/ai/FSRS/tests/test_deck_settings_service.py)
   - [`test_deck_population_service.py`](/home/egrebnev/Dev/ai/FSRS/tests/test_deck_population_service.py)
@@ -476,6 +501,7 @@
 - Cards editing: [`src/czech_vocab/services/card_edit_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/card_edit_service.py), [`src/czech_vocab/web/templates/card_edit.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/card_edit.html)
 - Settings: [`src/czech_vocab/services/settings_page_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/settings_page_service.py)
 - Deck population: [`src/czech_vocab/services/deck_population_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/deck_population_service.py), [`src/czech_vocab/repositories/deck_population_draft_repository.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/repositories/deck_population_draft_repository.py)
+- Deck creation drafts/UI: [`src/czech_vocab/services/deck_create_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/deck_create_service.py), [`src/czech_vocab/web/templates/deck_select.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/deck_select.html)
 - Stats: [`src/czech_vocab/services/stats_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/stats_service.py)
 - Templates/layout: [`src/czech_vocab/web/templates/base.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/base.html)
 - Tests: [`tests`](/home/egrebnev/Dev/ai/FSRS/tests)
@@ -503,8 +529,8 @@
 - Dashboard is deck-linked, not global-base aware
   - unassigned imported cards do not contribute to dashboard totals or review availability until later deck-population work links them.
 
-- Deck population selection is not routed yet
-  - the service and draft storage exist, but no Flask routes or templates consume them until later plan steps.
+- Deck creation is split across two services
+  - random creation lives in `DeckPopulationService`, while manual/mixed create flow state lives in `DeckCreateService`. Future add-to-deck work should avoid duplicating that split blindly.
 
 ## 13. Fast navigation checklist for future agents
 
@@ -517,6 +543,7 @@
 - If the task is about card editing, inspect [`card_edit_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/card_edit_service.py) and [`card_edit.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/card_edit.html) first.
 - If the task is about settings or deck defaults, inspect [`settings_page_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/settings_page_service.py) and [`deck_settings_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/deck_settings_service.py) first.
 - If the task is about deck creation/add flows or available-pool rules, inspect [`deck_population_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/deck_population_service.py) and [`deck_population_draft_repository.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/repositories/deck_population_draft_repository.py) first.
+- If the task is about manual or mixed deck creation UI, inspect [`deck_create_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/deck_create_service.py), [`deck_select.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/deck_select.html), and the `/deck-drafts/<token>/select` handlers in [`routes.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/routes.py) first.
 - If the task is about stats, inspect [`stats_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/stats_service.py) first.
 - If the task is about layout or styling, inspect [`base.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/base.html) and [`styles.css`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/static/styles.css) first.
 - If the task is about test expectations, inspect the matching `tests/test_*.py` file before changing code.

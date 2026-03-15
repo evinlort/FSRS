@@ -177,7 +177,10 @@ class DeckPopulationService:
         deck_name: str,
         requested_count: int,
         save_default_count: bool,
+        manual_card_ids: list[int] | None = None,
+        mode: str = "random",
     ) -> DeckRandomCreateResult:
+        manual_ids = manual_card_ids or []
         clean_name = deck_name.strip()
         if not clean_name:
             raise ValueError("Deck name is required.")
@@ -186,8 +189,8 @@ class DeckPopulationService:
 
         selection = self.build_selection(
             requested_count=requested_count,
-            manual_card_ids=[],
-            mode="random",
+            manual_card_ids=manual_ids,
+            mode=mode,
         )
         if not selection.cards:
             raise ValueError("No available cards.")
