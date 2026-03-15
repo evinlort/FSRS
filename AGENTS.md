@@ -91,6 +91,14 @@ After completing a step:
 - create one clear commit if the environment allows it
 - otherwise provide the exact commit message that should be used
 
+## Project map maintenance
+- `docs/PROJECT_MAP.md` is the fast orientation document for this repository.
+- After any completed step that changes routes, DB schema, services, major flows, templates, or project structure, update `docs/PROJECT_MAP.md`.
+- Keep the map concise and high-signal.
+- Do not rewrite the whole map if only a few sections changed.
+- Verify changed relations from real code before updating the map.
+- Do not modify application code when performing a map-only update.
+
 ## Response style
 Be concise.
 State assumptions explicitly.
