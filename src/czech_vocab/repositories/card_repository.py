@@ -58,6 +58,17 @@ class CardRepository:
         query = f"{CARD_SELECT} WHERE cards.lemma_key = ?"
         return self._fetch_one(query, (lemma_key,), connection=connection)
 
+    def list_available_cards(self) -> list[CardRecord]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                {CARD_SELECT}
+                WHERE deck_cards.card_id IS NULL
+                ORDER BY cards.lemma, cards.id
+                """
+            ).fetchall()
+        return [row_to_card(row) for row in rows]
+
     def create_card(
         self,
         card: CardCreate,

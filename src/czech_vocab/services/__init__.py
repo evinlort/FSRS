@@ -11,6 +11,11 @@ from czech_vocab.services.card_edit_service import (
     CardEditService,
 )
 from czech_vocab.services.dashboard_service import DashboardData, DashboardService
+from czech_vocab.services.deck_population_service import (
+    AvailablePoolCard,
+    DeckPopulationSelection,
+    DeckPopulationService,
+)
 from czech_vocab.services.deck_settings_service import DeckSettingsService
 from czech_vocab.services.import_service import ImportPreview, ImportResult, ImportService
 from czech_vocab.services.settings_page_service import (
@@ -31,6 +36,9 @@ __all__ = [
     "CatalogPage",
     "DashboardData",
     "DashboardService",
+    "AvailablePoolCard",
+    "DeckPopulationSelection",
+    "DeckPopulationService",
     "DeckSettingsService",
     "ImportPreview",
     "ImportResult",

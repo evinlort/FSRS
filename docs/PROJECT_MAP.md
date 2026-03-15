@@ -24,6 +24,7 @@
   - deck-aware review queue rules
   - import preview persistence into a global unassigned word base
   - runtime deck membership resolved through `deck_cards` joins rather than `cards.deck_id`
+  - deck-population service foundation for available-pool search, random/manual/mixed selection rules, and server-side draft persistence
 - Major missing or partial areas:
   - deck creation/population flows are planned but not implemented yet, so imported words remain unassigned until later steps link them to decks
   - no optimizer or FSRS parameter fitting
@@ -204,7 +205,8 @@
 - `deck_population_drafts`
   - role: server-side draft state for manual deck population flows
   - important fields: `token`, `flow_type`, `deck_id`, `deck_name`, `requested_count`, `mode`, `selected_card_ids_json`
-  - written by: no runtime writer yet; introduced by schema as a dependency for planned manual selection flows
+  - written by: `DeckPopulationDraftRepository`, `DeckPopulationService`
+  - read by: `DeckPopulationDraftRepository`, `DeckPopulationService`
 
 - `review_logs`
   - role: immutable review history with soft undo marker
@@ -272,6 +274,11 @@
     - validates numeric inputs
     - writes app and deck settings in one SQLite transaction
     - owns validation for `default_target_deck_card_count >= 1`
+  - `DeckPopulationService`
+    - reads the global default deck target count
+    - searches the available global-card pool
+    - validates random/manual/mixed population rules
+    - persists manual-selection drafts server-side through `DeckPopulationDraftRepository`
 
 - Review state transitions
   - queue selection: `StudyService.get_queue_state()`
@@ -286,6 +293,10 @@
 - Settings logic
   - persistence: `settings_repository.py`, `deck_repository.py`
   - page assembly + validation: `settings_page_service.py`
+
+- Deck population logic
+  - available pool and selection rules: `deck_population_service.py`
+  - draft persistence: `deck_population_draft_repository.py`
 
 ## 8. End-to-end flows
 
@@ -357,6 +368,14 @@
   - tables affected: `app_settings`, `decks`
   - result: persisted review defaults
 
+- Deck population foundation flow
+  1. `DeckPopulationService.get_default_target_count()` reads `app_settings`
+  2. `search_available_cards()` returns only global cards without `deck_cards` links
+  3. `build_selection()` validates manual ids, applies random fill, and flags shortfall/insufficient-pool cases
+  4. `create_draft()` / `update_draft()` / `get_draft()` persist manual-selection state in SQLite
+  - tables affected: read-only `cards`, `deck_cards`, read/write `deck_population_drafts`, read-only `app_settings`
+  - result: future create/add routes can use one source of truth for pool selection and server-side draft state
+
 ## 9. Template/UI map
 
 - Base layout
@@ -410,6 +429,7 @@
 - Persistence and decks/settings
   - [`test_card_repository.py`](/home/egrebnev/Dev/ai/FSRS/tests/test_card_repository.py)
   - [`test_deck_settings_service.py`](/home/egrebnev/Dev/ai/FSRS/tests/test_deck_settings_service.py)
+  - [`test_deck_population_service.py`](/home/egrebnev/Dev/ai/FSRS/tests/test_deck_population_service.py)
   - [`test_settings_service.py`](/home/egrebnev/Dev/ai/FSRS/tests/test_settings_service.py)
   - [`test_settings_page.py`](/home/egrebnev/Dev/ai/FSRS/tests/test_settings_page.py)
 
@@ -435,6 +455,7 @@
 - Review behavior: [`src/czech_vocab/services/study_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/study_service.py), [`src/czech_vocab/web/templates/review.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/review.html), [`src/czech_vocab/web/static/app.js`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/static/app.js)
 - Cards editing: [`src/czech_vocab/services/card_edit_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/card_edit_service.py), [`src/czech_vocab/web/templates/card_edit.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/card_edit.html)
 - Settings: [`src/czech_vocab/services/settings_page_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/settings_page_service.py)
+- Deck population: [`src/czech_vocab/services/deck_population_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/deck_population_service.py), [`src/czech_vocab/repositories/deck_population_draft_repository.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/repositories/deck_population_draft_repository.py)
 - Stats: [`src/czech_vocab/services/stats_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/stats_service.py)
 - Templates/layout: [`src/czech_vocab/web/templates/base.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/base.html)
 - Tests: [`tests`](/home/egrebnev/Dev/ai/FSRS/tests)
@@ -462,6 +483,9 @@
 - Dashboard is deck-linked, not global-base aware
   - unassigned imported cards do not contribute to dashboard totals or review availability until later deck-population work links them.
 
+- Deck population selection is not routed yet
+  - the service and draft storage exist, but no Flask routes or templates consume them until later plan steps.
+
 ## 13. Fast navigation checklist for future agents
 
 - If the task is about routes or form payloads, inspect [`routes.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/routes.py) first.
@@ -472,6 +496,7 @@
 - If the task is about cards list/search, inspect [`card_catalog_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/card_catalog_service.py) first.
 - If the task is about card editing, inspect [`card_edit_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/card_edit_service.py) and [`card_edit.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/card_edit.html) first.
 - If the task is about settings or deck defaults, inspect [`settings_page_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/settings_page_service.py) and [`deck_settings_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/deck_settings_service.py) first.
+- If the task is about deck creation/add flows or available-pool rules, inspect [`deck_population_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/deck_population_service.py) and [`deck_population_draft_repository.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/repositories/deck_population_draft_repository.py) first.
 - If the task is about stats, inspect [`stats_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/stats_service.py) first.
 - If the task is about layout or styling, inspect [`base.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/base.html) and [`styles.css`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/static/styles.css) first.
 - If the task is about test expectations, inspect the matching `tests/test_*.py` file before changing code.

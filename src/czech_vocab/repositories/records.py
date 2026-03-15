@@ -76,6 +76,23 @@ class ImportPreviewRecord:
 
 
 @dataclass(frozen=True)
+class DeckPopulationDraftRecord:
+    token: str
+    flow_type: str
+    deck_id: int | None
+    deck_name: str | None
+    requested_count: int
+    mode: str
+    save_default_count: bool
+    selected_card_ids: list[int]
+    search_in: str
+    query_text: str
+    page: int
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
 class UndoReviewSnapshot:
     card_id: int
     deck_id: int
@@ -155,6 +172,24 @@ def row_to_import_preview(row: sqlite3.Row) -> ImportPreviewRecord:
         duplicate_count=row["duplicate_count"],
         imported_at=parse_datetime(row["imported_at"]),
         created_at=parse_datetime(row["created_at"]),
+    )
+
+
+def row_to_deck_population_draft(row: sqlite3.Row) -> DeckPopulationDraftRecord:
+    return DeckPopulationDraftRecord(
+        token=row["token"],
+        flow_type=row["flow_type"],
+        deck_id=row["deck_id"],
+        deck_name=row["deck_name"],
+        requested_count=row["requested_count"],
+        mode=row["mode"],
+        save_default_count=bool(row["save_default_count"]),
+        selected_card_ids=json.loads(row["selected_card_ids_json"]),
+        search_in=row["search_in"],
+        query_text=row["query_text"],
+        page=row["page"],
+        created_at=parse_datetime(row["created_at"]),
+        updated_at=parse_datetime(row["updated_at"]),
     )
 
 

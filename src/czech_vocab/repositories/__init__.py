@@ -4,12 +4,16 @@ from czech_vocab.repositories.card_repository import (
     CardRepository,
 )
 from czech_vocab.repositories.deck_card_repository import DeckCardRepository
+from czech_vocab.repositories.deck_population_draft_repository import (
+    DeckPopulationDraftRepository,
+)
 from czech_vocab.repositories.deck_repository import DeckRepository
 from czech_vocab.repositories.import_preview_repository import ImportPreviewRepository
 from czech_vocab.repositories.records import (
     AppSettingsRecord,
     CardCreate,
     CardRecord,
+    DeckPopulationDraftRecord,
     DeckRecord,
     ImportPreviewRecord,
     ReviewLogRecord,
@@ -26,6 +30,8 @@ __all__ = [
     "CardRecord",
     "CardRepository",
     "DeckCardRepository",
+    "DeckPopulationDraftRecord",
+    "DeckPopulationDraftRepository",
     "DeckRecord",
     "DeckRepository",
     "ImportPreviewRecord",
