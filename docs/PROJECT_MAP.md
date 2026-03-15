@@ -511,6 +511,7 @@
   - [`test_stats_service.py`](/home/egrebnev/Dev/ai/FSRS/tests/test_stats_service.py)
   - [`test_stats_page.py`](/home/egrebnev/Dev/ai/FSRS/tests/test_stats_page.py)
   - [`test_dashboard_and_acceptance.py`](/home/egrebnev/Dev/ai/FSRS/tests/test_dashboard_and_acceptance.py)
+    - includes route-level regression coverage for saved target-count defaults, dashboard flashes, and create/add deck population flows
 
 - Obvious test gaps
   - no separate tests for the global JS module itself; keyboard/busy behavior is mostly covered through route/UI expectations and prior MCP/browser checks, not unit tests
