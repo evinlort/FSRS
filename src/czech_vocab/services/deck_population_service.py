@@ -226,15 +226,18 @@ class DeckPopulationService:
         deck_id: int,
         requested_count: int,
         save_default_count: bool,
+        manual_card_ids: list[int] | None = None,
+        mode: str = "random",
     ) -> DeckRandomCreateResult:
         deck = self._deck_repository.get_deck_by_id(deck_id)
         if deck is None:
             raise LookupError(f"Deck not found: {deck_id}")
 
+        manual_ids = manual_card_ids or []
         selection = self.build_selection(
             requested_count=requested_count,
-            manual_card_ids=[],
-            mode="random",
+            manual_card_ids=manual_ids,
+            mode=mode,
         )
         if not selection.cards:
             raise ValueError("No available cards.")

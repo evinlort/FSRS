@@ -22,6 +22,7 @@ from czech_vocab.services import (
     CardEditMetadataRow,
     CardEditService,
     DashboardService,
+    DeckAddService,
     DeckCreateService,
     DeckPopulationService,
     DeckSettingsService,
@@ -114,6 +115,22 @@ def submit_add_to_deck_page(deck_id: int):
     errors = _validate_deck_add_form(form_state)
     if errors:
         return _render_deck_add_page(deck, form_state=form_state, errors=errors), 400
+    if form_state["mode"] in {"manual", "mixed"}:
+        draft_service = DeckAddService(current_app.config["DATABASE_PATH"])
+        try:
+            token = draft_service.start_add_flow(
+                deck_id=deck.id,
+                requested_count=form_state["requested_count"],
+                mode=form_state["mode"],
+                save_default_count=form_state["save_default_count"],
+            )
+        except (LookupError, ValueError) as exc:
+            return _render_deck_add_page(
+                deck,
+                form_state=form_state,
+                errors={"form": _deck_add_error_message(str(exc))},
+            ), 400
+        return redirect(url_for("main.deck_draft_selection_page", token=token))
     try:
         result = service.add_random_cards_to_deck(
             deck_id=deck.id,
@@ -132,30 +149,36 @@ def submit_add_to_deck_page(deck_id: int):
 
 @main_bp.get("/deck-drafts/<token>/select")
 def deck_draft_selection_page(token: str):
-    service = DeckCreateService(current_app.config["DATABASE_PATH"])
     try:
-        page_data = service.get_draft_page(token)
+        page_data, context = _load_draft_page(token)
     except LookupError:
         return "Draft not found", 404
-    return _render_deck_draft_page(page_data)
+    return _render_deck_draft_page(page_data, **context)
 
 
 @main_bp.post("/deck-drafts/<token>/select")
 def update_deck_draft_selection_page(token: str):
-    service = DeckCreateService(current_app.config["DATABASE_PATH"])
     action = request.form.get("action", "update")
     selected_ids = _selected_card_ids_from_request()
     search_in = request.form.get("search_in", "czech")
     query = request.form.get("q", "")
     try:
+        service, context, success_message = _draft_controller(token)
+    except LookupError:
+        return "Draft not found", 404
+    try:
         if action == "confirm":
-            result = service.confirm_create_flow(
+            confirm_method = getattr(service, "confirm_create_flow", None) or getattr(
+                service,
+                "confirm_add_flow",
+            )
+            result = confirm_method(
                 token=token,
                 selected_card_ids=selected_ids,
                 search_in=search_in,
                 query=query,
             )
-            flash(_deck_created_flash(result.deck_name, result.assigned_count), "success")
+            flash(success_message(result.deck_name, result.assigned_count), "success")
             return redirect(url_for("main.home"))
         page_data = service.update_draft_page(
             token=token,
@@ -163,8 +186,6 @@ def update_deck_draft_selection_page(token: str):
             search_in=search_in,
             query=query,
         )
-    except LookupError:
-        return "Draft not found", 404
     except ValueError as exc:
         try:
             page_data = service.update_draft_page(
@@ -175,8 +196,12 @@ def update_deck_draft_selection_page(token: str):
             )
         except LookupError:
             return "Draft not found", 404
-        return _render_deck_draft_page(page_data, error=_draft_error_message(str(exc))), 400
-    return _render_deck_draft_page(page_data)
+        return _render_deck_draft_page(
+            page_data,
+            error=_draft_error_message(str(exc)),
+            **context,
+        ), 400
+    return _render_deck_draft_page(page_data, **context)
 
 
 @main_bp.post("/import/preview")
@@ -415,6 +440,7 @@ def _render_deck_add_page(
     state = form_state or {
         "requested_count_raw": "",
         "requested_count": default_count,
+        "mode": "random",
         "save_default_count": False,
     }
     return render_template(
@@ -426,8 +452,22 @@ def _render_deck_add_page(
     )
 
 
-def _render_deck_draft_page(page_data, error: str | None = None) -> str:
-    return render_template("deck_select.html", draft_page=page_data, error=error)
+def _render_deck_draft_page(
+    page_data,
+    *,
+    error: str | None = None,
+    selection_intro: str,
+    submit_label: str,
+    availability_note: str,
+) -> str:
+    return render_template(
+        "deck_select.html",
+        draft_page=page_data,
+        error=error,
+        selection_intro=selection_intro,
+        submit_label=submit_label,
+        availability_note=availability_note,
+    )
 
 
 def _settings_form_payload(service: SettingsPageService) -> dict[str, object]:
@@ -473,6 +513,7 @@ def _deck_add_form_state(service: DeckPopulationService) -> dict[str, object]:
     return {
         "requested_count_raw": requested_raw,
         "requested_count": _parse_positive_int(requested_raw, default_count),
+        "mode": request.form.get("mode", "random"),
         "save_default_count": request.form.get("save_default_count") == "on",
     }
 
@@ -490,6 +531,8 @@ def _validate_new_deck_form(form_state: dict[str, object]) -> dict[str, str]:
 
 def _validate_deck_add_form(form_state: dict[str, object]) -> dict[str, str]:
     errors: dict[str, str] = {}
+    if form_state["mode"] not in {"random", "manual", "mixed"}:
+        errors["form"] = "Выберите режим добавления карточек."
     if not _is_positive_int(form_state["requested_count_raw"]):
         errors["requested_count"] = "Количество карточек должно быть целым числом 1 или больше."
     return errors
@@ -524,7 +567,7 @@ def _draft_error_message(message: str) -> str:
     if "cannot exceed" in message:
         return "Нельзя выбрать больше карточек, чем запрошено."
     if "empty" in message:
-        return "Новая колода не может быть пустой."
+        return "Выберите хотя бы одну карточку."
     if "available" in message:
         return "Выбранные карточки больше недоступны."
     if "already exists" in message:
@@ -544,6 +587,51 @@ def _deck_add_error_message(message: str) -> str:
 
 def _deck_added_flash(deck_name: str, assigned_count: int) -> str:
     return f"В колоду «{deck_name}» добавлено {assigned_count} карточек."
+
+
+def _load_draft_page(token: str):
+    service, context, _ = _draft_controller(token)
+    return service.get_draft_page(token), context
+
+
+def _draft_controller(token: str):
+    service = DeckPopulationService(current_app.config["DATABASE_PATH"])
+    draft = service.get_draft(token)
+    if draft is None:
+        raise LookupError(f"Draft not found: {token}")
+    if draft.flow_type == "add":
+        return (
+            DeckAddService(current_app.config["DATABASE_PATH"]),
+            {
+                "selection_intro": (
+                    "Колода: "
+                    f"{draft.deck_name}. Выберите свободные карточки вручную "
+                    "или подтвердите смешанное добавление."
+                ),
+                "submit_label": "Добавить карточки",
+                "availability_note": (
+                    "Доступны только свободные карточки: текущая колода "
+                    "и карточки из других колод здесь не показываются."
+                ),
+            },
+            _deck_added_flash,
+        )
+    return (
+        DeckCreateService(current_app.config["DATABASE_PATH"]),
+        {
+            "selection_intro": (
+                "Колода: "
+                f"{draft.deck_name}. Выберите карточки вручную "
+                "или подтвердите смешанное заполнение."
+            ),
+            "submit_label": "Создать колоду",
+            "availability_note": (
+                "Доступны только свободные карточки: текущая колода "
+                "и карточки из других колод здесь не показываются."
+            ),
+        },
+        _deck_created_flash,
+    )
 
 
 def _selected_card_ids_from_request() -> list[int]:

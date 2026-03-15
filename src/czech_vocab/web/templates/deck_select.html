@@ -4,12 +4,13 @@
 {% block page_eyebrow %}Колоды{% endblock %}
 {% block page_title %}Выбор карточек для колоды{% endblock %}
 {% block page_intro %}
-  <p>Колода: {{ draft_page.deck_name }}. Выберите карточки вручную или подтвердите смешанное заполнение.</p>
+  <p>{{ selection_intro }}</p>
 {% endblock %}
 
 {% block content %}
   <section class="panel">
     <p><strong>Выбрано {{ draft_page.selected_count }} из {{ draft_page.requested_count }}</strong></p>
+    <p>{{ availability_note }}</p>
     {% if draft_page.warning_message %}
       <div class="state-panel state-panel--warning">
         <h2 class="state-panel__title">Выбрано меньше карточек, чем запрошено</h2>
@@ -52,8 +53,8 @@
 
       <div class="action-row">
         <button class="button" type="submit" name="action" value="update">Обновить выбор</button>
-        <button class="button button--primary" type="submit" name="action" value="confirm" data-busy-label="Создаём колоду...">
-          Создать колоду
+        <button class="button button--primary" type="submit" name="action" value="confirm" data-busy-label="{{ submit_label }}...">
+          {{ submit_label }}
         </button>
       </div>
     </form>

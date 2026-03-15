@@ -25,9 +25,8 @@
   - import preview persistence into a global unassigned word base
   - runtime deck membership resolved through `deck_cards` joins rather than `cards.deck_id`
   - deck creation with random, manual, and mixed selection flows backed by server-side SQLite drafts
-  - random add-to-existing-deck flow from the global available pool
+  - random, manual, and mixed add-to-existing-deck flows from the global available pool
 - Major missing or partial areas:
-  - manual and mixed add-to-existing-deck flows are still planned but not implemented
   - imported words remain unassigned until a deck-creation or future add-to-deck flow links them
   - no optimizer or FSRS parameter fitting
   - no auth or multi-user support
@@ -131,7 +130,7 @@
   - methods: `GET`, `POST`
   - handlers: `deck_draft_selection_page()`, `update_deck_draft_selection_page()`
   - template: [`deck_select.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/deck_select.html)
-  - service: `DeckCreateService`
+  - services: `DeckCreateService`, [`DeckAddService`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/deck_add_service.py)
   - inputs: `action`, `search_in`, `q`, repeated `selected_card_ids`
   - DB access: `deck_population_drafts`, read-only `cards`, `deck_cards`, and on confirm also `decks`, `app_settings`
 
@@ -139,9 +138,9 @@
   - methods: `GET`, `POST`
   - handlers: `add_to_deck_page()`, `submit_add_to_deck_page()`
   - template: [`deck_add.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/deck_add.html)
-  - service: `DeckPopulationService`
-  - inputs: `requested_count`, `save_default_count`
-  - DB access: `decks`, `app_settings`, `deck_cards`, read-only `cards`
+  - services: `DeckPopulationService`, `DeckAddService`
+  - inputs: `requested_count`, `mode`, `save_default_count`
+  - DB access: `decks`, `app_settings`, `deck_cards`, `deck_population_drafts`, read-only `cards`
 
 - `/review`
   - methods: `GET`
@@ -306,7 +305,11 @@
     - validates random/manual/mixed population rules
     - persists manual-selection drafts server-side through `DeckPopulationDraftRepository`
     - creates random-filled decks and can save the requested count back to global settings
-    - adds random cards to an existing deck from the same available pool
+    - adds random, manual, or mixed cards to an existing deck from the same available pool
+  - `DeckAddService`
+    - starts manual/mixed add flows for an existing deck
+    - turns add drafts into selection-page view models
+    - validates draft updates and final manual/mixed add confirmation
   - `DeckCreateService`
     - starts manual/mixed create flows
     - turns persisted drafts into selection-page view models
@@ -427,14 +430,15 @@
   - tables affected: `deck_population_drafts`, `decks`, `deck_cards`, optionally `app_settings`, read-only `cards`
   - result: a new deck exists with manually selected or mixed selected-plus-random cards
 
-- Random add-to-existing-deck flow
+- Existing deck add flow
   1. Dashboard exposes `GET /decks/<id>/add` for each deck
   2. The page preloads `requested_count` from `app_settings.default_target_deck_card_count`
-  3. `POST /decks/<id>/add` validates the count and calls `DeckPopulationService.add_random_cards_to_deck()`
-  4. The service assigns available global cards through `deck_cards` and can save the requested count back to app settings
-  5. The app redirects back to `/` with a success flash
-  - tables affected: `deck_cards`, optionally `app_settings`, read-only `cards`, `decks`
-  - result: an existing deck gains more linked cards from the global base
+  3. `POST /decks/<id>/add` either adds random cards immediately or starts a draft-backed manual/mixed selection flow
+  4. `GET|POST /deck-drafts/<token>/select` reuses the shared selection page for add drafts
+  5. Confirmation assigns selected cards only in manual mode, or selected plus random fill in mixed mode
+  6. The app redirects back to `/` with a success flash
+  - tables affected: `deck_cards`, `deck_population_drafts`, optionally `app_settings`, read-only `cards`, `decks`
+  - result: an existing deck gains linked cards from the global base without exposing already assigned cards
 
 ## 9. Template/UI map
 
@@ -446,7 +450,7 @@
   - dashboard: `home.html`
   - random deck creation: `deck_create.html`
   - deck manual/mixed selection: `deck_select.html`
-  - add random cards to an existing deck: `deck_add.html`
+  - add cards to an existing deck: `deck_add.html`
   - import: `import.html`
   - review: `review.html`
   - cards list: `cards.html`
@@ -525,6 +529,7 @@
 - Deck population: [`src/czech_vocab/services/deck_population_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/deck_population_service.py), [`src/czech_vocab/repositories/deck_population_draft_repository.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/repositories/deck_population_draft_repository.py)
 - Deck creation drafts/UI: [`src/czech_vocab/services/deck_create_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/deck_create_service.py), [`src/czech_vocab/web/templates/deck_select.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/deck_select.html)
 - Deck add flow: [`src/czech_vocab/web/templates/deck_add.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/deck_add.html), `/decks/<id>/add` handlers in [`routes.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/routes.py)
+- Manual/mixed add flow state: [`src/czech_vocab/services/deck_add_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/deck_add_service.py)
 - Stats: [`src/czech_vocab/services/stats_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/stats_service.py)
 - Templates/layout: [`src/czech_vocab/web/templates/base.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/base.html)
 - Tests: [`tests`](/home/egrebnev/Dev/ai/FSRS/tests)
@@ -555,8 +560,8 @@
 - Deck creation is split across two services
   - random creation lives in `DeckPopulationService`, while manual/mixed create flow state lives in `DeckCreateService`. Future add-to-deck work should avoid duplicating that split blindly.
 
-- Deck population flows are diverging
-  - create and add already have separate route/template paths. Manual/mixed add work should reuse the draft selection mechanics instead of introducing a third selection implementation.
+- Deck population flows are split across three services
+  - create, add, and low-level population rules now live in separate services. Future changes to draft selection behavior should update both create and add services together or extract a shared layer.
 
 ## 13. Fast navigation checklist for future agents
 
@@ -571,6 +576,7 @@
 - If the task is about deck creation/add flows or available-pool rules, inspect [`deck_population_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/deck_population_service.py) and [`deck_population_draft_repository.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/repositories/deck_population_draft_repository.py) first.
 - If the task is about manual or mixed deck creation UI, inspect [`deck_create_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/deck_create_service.py), [`deck_select.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/deck_select.html), and the `/deck-drafts/<token>/select` handlers in [`routes.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/routes.py) first.
 - If the task is about adding cards to an existing deck, inspect `DeckPopulationService.add_random_cards_to_deck()`, [`deck_add.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/deck_add.html), and the `/decks/<id>/add` handlers in [`routes.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/routes.py) first.
+- If the task is about manual or mixed add-to-deck behavior, inspect [`deck_add_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/deck_add_service.py) and the draft dispatch logic in [`routes.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/routes.py) first.
 - If the task is about stats, inspect [`stats_service.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/stats_service.py) first.
 - If the task is about layout or styling, inspect [`base.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/base.html) and [`styles.css`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/static/styles.css) first.
 - If the task is about test expectations, inspect the matching `tests/test_*.py` file before changing code.

@@ -1,6 +1,11 @@
 from datetime import UTC, datetime
 
-from czech_vocab.repositories import CardCreate, CardRepository, build_identity_key
+from czech_vocab.repositories import (
+    CardCreate,
+    CardRepository,
+    DeckCardRepository,
+    build_identity_key,
+)
 from czech_vocab.services import DeckSettingsService
 
 
@@ -90,6 +95,108 @@ def test_add_random_cards_route_preserves_invalid_count_input(client, app) -> No
     page = response.get_data(as_text=True)
     assert "Количество карточек должно быть целым числом 1 или больше." in page
     assert 'value="0"' in page
+
+
+def test_manual_add_redirects_to_selection_page_and_excludes_assigned_cards(client, app) -> None:
+    database_path = app.config["DATABASE_PATH"]
+    deck_service = DeckSettingsService(database_path)
+    deck = deck_service.create_deck("Путешествия")
+    other = deck_service.create_deck("Работа")
+    first = create_global_card(database_path, "kniha", "книга")
+    create_global_card(database_path, "dum", "дом")
+    blocked = create_global_card(database_path, "vlak", "поезд")
+    DeckCardRepository(database_path).assign_card_to_deck(card_id=blocked.id, deck_id=other.id)
+
+    start_response = client.post(
+        f"/decks/{deck.id}/add",
+        data={
+            "requested_count": "3",
+            "mode": "manual",
+        },
+    )
+
+    assert start_response.status_code == 302
+    assert "/deck-drafts/" in start_response.headers["Location"]
+    select_page = client.get(start_response.headers["Location"]).get_data(as_text=True)
+    assert f'value="{first.id}"' in select_page
+    assert "поезд" not in select_page
+    assert "текущая колода и карточки из других колод здесь не показываются" in select_page
+
+
+def test_manual_add_selection_can_add_checked_cards_only(client, app) -> None:
+    database_path = app.config["DATABASE_PATH"]
+    deck = DeckSettingsService(database_path).create_deck("Путешествия")
+    first = create_global_card(database_path, "kniha", "книга")
+    create_global_card(database_path, "dum", "дом")
+    create_global_card(database_path, "lod", "лодка")
+
+    start_response = client.post(
+        f"/decks/{deck.id}/add",
+        data={
+            "requested_count": "3",
+            "mode": "manual",
+        },
+    )
+
+    response = client.post(
+        start_response.headers["Location"],
+        data={
+            "action": "confirm",
+            "search_in": "czech",
+            "q": "",
+            "selected_card_ids": [str(first.id)],
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    page = response.get_data(as_text=True)
+    assert "В колоду «Путешествия» добавлено 1 карточек." in page
+
+    with CardRepository(database_path).connect() as connection:
+        count = connection.execute(
+            "SELECT COUNT(*) FROM deck_cards WHERE deck_id = ?",
+            (deck.id,),
+        ).fetchone()[0]
+    assert count == 1
+
+
+def test_mixed_add_selection_adds_manual_and_random_fill(client, app) -> None:
+    database_path = app.config["DATABASE_PATH"]
+    deck = DeckSettingsService(database_path).create_deck("Путешествия")
+    first = create_global_card(database_path, "kniha", "книга")
+    create_global_card(database_path, "dum", "дом")
+    create_global_card(database_path, "lod", "лодка")
+
+    start_response = client.post(
+        f"/decks/{deck.id}/add",
+        data={
+            "requested_count": "2",
+            "mode": "mixed",
+        },
+    )
+
+    response = client.post(
+        start_response.headers["Location"],
+        data={
+            "action": "confirm",
+            "search_in": "czech",
+            "q": "",
+            "selected_card_ids": [str(first.id)],
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    page = response.get_data(as_text=True)
+    assert "В колоду «Путешествия» добавлено 2 карточек." in page
+
+    with CardRepository(database_path).connect() as connection:
+        count = connection.execute(
+            "SELECT COUNT(*) FROM deck_cards WHERE deck_id = ?",
+            (deck.id,),
+        ).fetchone()[0]
+    assert count == 2
 
 
 def create_global_card(database_path, lemma: str, translation: str):

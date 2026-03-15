@@ -11,6 +11,11 @@ from czech_vocab.services.card_edit_service import (
     CardEditService,
 )
 from czech_vocab.services.dashboard_service import DashboardData, DashboardService
+from czech_vocab.services.deck_add_service import (
+    DeckAddDraftPage,
+    DeckAddSelectionCard,
+    DeckAddService,
+)
 from czech_vocab.services.deck_create_service import (
     DeckCreateDraftPage,
     DeckCreateService,
@@ -40,6 +45,9 @@ __all__ = [
     "CardEditService",
     "CatalogCard",
     "CatalogPage",
+    "DeckAddDraftPage",
+    "DeckAddSelectionCard",
+    "DeckAddService",
     "DeckCreateDraftPage",
     "DeckCreateService",
     "DeckDraftSelectionCard",
