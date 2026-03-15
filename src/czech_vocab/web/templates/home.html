@@ -54,6 +54,9 @@
             <strong>{{ deck.name }}</strong>
             <span>{{ deck.total_cards }} карточек</span>
             <span>{{ deck.due_cards }} к повторению</span>
+            <a class="button" href="{{ url_for('main.add_to_deck_page', deck_id=deck.deck_id) }}">
+              Добавить карточки
+            </a>
           </li>
         {% endfor %}
       </ul>

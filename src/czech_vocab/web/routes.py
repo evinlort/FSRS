@@ -94,6 +94,42 @@ def create_deck_page():
     return redirect(url_for("main.home"))
 
 
+@main_bp.get("/decks/<int:deck_id>/add")
+def add_to_deck_page(deck_id: int):
+    try:
+        deck = _get_deck(deck_id)
+    except LookupError as exc:
+        return str(exc), 404
+    return _render_deck_add_page(deck)
+
+
+@main_bp.post("/decks/<int:deck_id>/add")
+def submit_add_to_deck_page(deck_id: int):
+    try:
+        deck = _get_deck(deck_id)
+    except LookupError as exc:
+        return str(exc), 404
+    service = DeckPopulationService(current_app.config["DATABASE_PATH"])
+    form_state = _deck_add_form_state(service)
+    errors = _validate_deck_add_form(form_state)
+    if errors:
+        return _render_deck_add_page(deck, form_state=form_state, errors=errors), 400
+    try:
+        result = service.add_random_cards_to_deck(
+            deck_id=deck.id,
+            requested_count=form_state["requested_count"],
+            save_default_count=form_state["save_default_count"],
+        )
+    except ValueError as exc:
+        return _render_deck_add_page(
+            deck,
+            form_state=form_state,
+            errors={"form": _deck_add_error_message(str(exc))},
+        ), 400
+    flash(_deck_added_flash(result.deck_name, result.assigned_count), "success")
+    return redirect(url_for("main.home"))
+
+
 @main_bp.get("/deck-drafts/<token>/select")
 def deck_draft_selection_page(token: str):
     service = DeckCreateService(current_app.config["DATABASE_PATH"])
@@ -368,6 +404,28 @@ def _render_new_deck_page(
     )
 
 
+def _render_deck_add_page(
+    deck,
+    *,
+    form_state: dict[str, object] | None = None,
+    errors: dict[str, str] | None = None,
+) -> str:
+    service = DeckPopulationService(current_app.config["DATABASE_PATH"])
+    default_count = service.get_default_target_count()
+    state = form_state or {
+        "requested_count_raw": "",
+        "requested_count": default_count,
+        "save_default_count": False,
+    }
+    return render_template(
+        "deck_add.html",
+        deck=deck,
+        form_state=state,
+        available_count=service.count_available_cards(),
+        errors=errors or {},
+    )
+
+
 def _render_deck_draft_page(page_data, error: str | None = None) -> str:
     return render_template("deck_select.html", draft_page=page_data, error=error)
 
@@ -409,12 +467,29 @@ def _new_deck_form_state(service: DeckPopulationService) -> dict[str, object]:
     }
 
 
+def _deck_add_form_state(service: DeckPopulationService) -> dict[str, object]:
+    requested_raw = request.form.get("requested_count", "").strip()
+    default_count = service.get_default_target_count()
+    return {
+        "requested_count_raw": requested_raw,
+        "requested_count": _parse_positive_int(requested_raw, default_count),
+        "save_default_count": request.form.get("save_default_count") == "on",
+    }
+
+
 def _validate_new_deck_form(form_state: dict[str, object]) -> dict[str, str]:
     errors: dict[str, str] = {}
     if not form_state["deck_name"]:
         errors["deck_name"] = "Введите название колоды."
     if form_state["mode"] not in {"random", "manual", "mixed"}:
         errors["form"] = "Выберите режим заполнения колоды."
+    if not _is_positive_int(form_state["requested_count_raw"]):
+        errors["requested_count"] = "Количество карточек должно быть целым числом 1 или больше."
+    return errors
+
+
+def _validate_deck_add_form(form_state: dict[str, object]) -> dict[str, str]:
+    errors: dict[str, str] = {}
     if not _is_positive_int(form_state["requested_count_raw"]):
         errors["requested_count"] = "Количество карточек должно быть целым числом 1 или больше."
     return errors
@@ -461,6 +536,16 @@ def _deck_created_flash(deck_name: str, assigned_count: int) -> str:
     return f"Колода «{deck_name}» создана. Добавлено {assigned_count} карточек."
 
 
+def _deck_add_error_message(message: str) -> str:
+    if message == "No available cards.":
+        return "Свободных карточек пока нет. Сначала импортируйте слова в глобальную базу."
+    return "Не удалось добавить карточки в колоду. Проверьте данные и попробуйте снова."
+
+
+def _deck_added_flash(deck_name: str, assigned_count: int) -> str:
+    return f"В колоду «{deck_name}» добавлено {assigned_count} карточек."
+
+
 def _selected_card_ids_from_request() -> list[int]:
     selected: list[int] = []
     for raw_value in request.form.getlist("selected_card_ids"):
@@ -469,6 +554,14 @@ def _selected_card_ids_from_request() -> list[int]:
         except ValueError:
             continue
     return selected
+
+
+def _get_deck(deck_id: int):
+    service = DeckSettingsService(current_app.config["DATABASE_PATH"])
+    for deck in service.list_decks():
+        if deck.id == deck_id:
+            return deck
+    raise LookupError(f"Deck not found: {deck_id}")
 
 
 def _preview_error_context(error_message: str) -> tuple[str, str]:

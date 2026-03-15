@@ -220,6 +220,49 @@ class DeckPopulationService:
             saved_default_count=save_default_count,
         )
 
+    def add_random_cards_to_deck(
+        self,
+        *,
+        deck_id: int,
+        requested_count: int,
+        save_default_count: bool,
+    ) -> DeckRandomCreateResult:
+        deck = self._deck_repository.get_deck_by_id(deck_id)
+        if deck is None:
+            raise LookupError(f"Deck not found: {deck_id}")
+
+        selection = self.build_selection(
+            requested_count=requested_count,
+            manual_card_ids=[],
+            mode="random",
+        )
+        if not selection.cards:
+            raise ValueError("No available cards.")
+
+        settings = self._deck_settings.get_app_settings()
+        with self._repository.connect() as connection:
+            for card in selection.cards:
+                self._deck_card_repository.assign_card_to_deck(
+                    card_id=card.card_id,
+                    deck_id=deck.id,
+                    connection=connection,
+                )
+            if save_default_count:
+                self._settings_repository.update_settings(
+                    default_desired_retention=settings.default_desired_retention,
+                    default_daily_new_limit=settings.default_daily_new_limit,
+                    default_target_deck_card_count=selection.requested_count,
+                    connection=connection,
+                )
+        return DeckRandomCreateResult(
+            deck_id=deck.id,
+            deck_name=deck.name,
+            requested_count=selection.requested_count,
+            assigned_count=len(selection.cards),
+            insufficient_pool=selection.insufficient_pool,
+            saved_default_count=save_default_count,
+        )
+
     def _create_deck_record(self, name, settings, connection: sqlite3.Connection):
         try:
             return self._deck_repository.create_deck(
