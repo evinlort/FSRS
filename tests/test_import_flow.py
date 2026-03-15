@@ -1,10 +1,10 @@
 import sqlite3
 from io import BytesIO
 
-from czech_vocab.repositories import DeckRepository, build_identity_key
+from czech_vocab.repositories import build_identity_key
 
 
-def test_get_import_page_renders_upload_form_and_deck_controls(client) -> None:
+def test_get_import_page_renders_upload_form_for_global_base(client) -> None:
     response = client.get("/import")
 
     assert response.status_code == 200
@@ -13,8 +13,9 @@ def test_get_import_page_renders_upload_form_and_deck_controls(client) -> None:
     assert 'enctype="multipart/form-data"' in page
     assert 'type="file"' in page
     assert 'name="csv_file"' in page
-    assert 'name="deck_id"' in page
-    assert 'name="new_deck_name"' in page
+    assert "Глобальная база" in page
+    assert 'name="deck_id"' not in page
+    assert 'name="new_deck_name"' not in page
     assert "data-busy-form" in page
     assert 'data-busy-label="Готовим предпросмотр..."' in page
 
@@ -28,6 +29,7 @@ def test_preview_valid_csv_without_committing_and_confirm_import(client, app) ->
     assert preview_response.status_code == 200
     preview_page = preview_response.get_data(as_text=True)
     assert "Предпросмотр импорта" in preview_page
+    assert "Глобальная база" in preview_page
     assert "Готово к импорту: 2" in preview_page
     assert "Дубликаты будут пропущены: 0" in preview_page
     assert "Отклонено строк: 0" in preview_page
@@ -50,17 +52,18 @@ def test_preview_valid_csv_without_committing_and_confirm_import(client, app) ->
     assert stored_card is not None
     assert stored_card["due_at"] is not None
     assert stored_card["fsrs_state_json"] != "{}"
+    assert stored_card["deck_id"] is None
+    assert count_deck_links(app.config["DATABASE_PATH"]) == 0
 
 
-def test_preview_can_create_new_deck_on_confirm(client, app) -> None:
+def test_imported_cards_remain_unassigned_and_not_reviewable(client, app) -> None:
     preview_response = preview_csv(
         client,
         "lemma_cs,translation_ru,notes\nlod,лодка,travel\n",
-        new_deck_name="Путешествия",
     )
 
     preview_page = preview_response.get_data(as_text=True)
-    assert "Целевая колода: Путешествия" in preview_page
+    assert "Глобальная база" in preview_page
 
     confirm_response = client.post(
         "/import/confirm",
@@ -69,13 +72,17 @@ def test_preview_can_create_new_deck_on_confirm(client, app) -> None:
     )
 
     assert confirm_response.status_code == 200
-    deck = DeckRepository(app.config["DATABASE_PATH"]).get_deck_by_name("Путешествия")
-    assert deck is not None
-    stored_card = fetch_card(app.config["DATABASE_PATH"], "lod", "лодка", deck_name="Путешествия")
+    stored_card = fetch_card(app.config["DATABASE_PATH"], "lod", "лодка")
     assert stored_card is not None
+    assert stored_card["deck_id"] is None
+    review_page = client.get("/review?deck=1").get_data(as_text=True)
+    assert "Колода пуста" in review_page
 
 
-def test_duplicate_preview_and_confirm_skip_existing_card_without_updating(client, app) -> None:
+def test_duplicate_preview_and_confirm_skip_existing_lemma_globally_without_updating(
+    client,
+    app,
+) -> None:
     first_preview = preview_csv(client, "lemma_cs,translation_ru,notes\nkniha,книга,old note\n")
     client.post(
         "/import/confirm",
@@ -85,7 +92,7 @@ def test_duplicate_preview_and_confirm_skip_existing_card_without_updating(clien
 
     preview_response = preview_csv(
         client,
-        "lemma_cs,translation_ru,notes\nkniha,книга,new note\n",
+        "lemma_cs,translation_ru,notes\nkniha,издание,new note\n",
     )
 
     preview_page = preview_response.get_data(as_text=True)
@@ -147,13 +154,11 @@ def test_missing_required_headers_block_confirmation_without_partial_writes(clie
     assert count_cards(app.config["DATABASE_PATH"]) == 0
 
 
-def preview_csv(client, csv_text: str, *, deck_id: str = "1", new_deck_name: str = ""):
+def preview_csv(client, csv_text: str):
     return client.post(
         "/import/preview",
         data={
             "csv_file": (BytesIO(csv_text.encode("utf-8")), "words.csv"),
-            "deck_id": deck_id,
-            "new_deck_name": new_deck_name,
         },
         content_type="multipart/form-data",
     )
@@ -172,17 +177,26 @@ def count_cards(database_path) -> int:
     return row[0]
 
 
-def fetch_card(database_path, lemma: str, translation: str, *, deck_name: str = "Основная"):
+def count_deck_links(database_path) -> int:
+    with sqlite3.connect(database_path) as connection:
+        row = connection.execute("SELECT COUNT(*) FROM deck_cards").fetchone()
+    return row[0]
+
+
+def fetch_card(database_path, lemma: str, translation: str):
     identity_key = build_identity_key(lemma, translation)
     with sqlite3.connect(database_path) as connection:
         connection.row_factory = sqlite3.Row
         return connection.execute(
             """
-            SELECT cards.notes, cards.due_at, cards.fsrs_state_json
+            SELECT
+                cards.notes,
+                cards.due_at,
+                cards.fsrs_state_json,
+                deck_cards.deck_id AS deck_id
             FROM cards
-            JOIN deck_cards ON deck_cards.card_id = cards.id
-            JOIN decks ON decks.id = deck_cards.deck_id
-            WHERE cards.identity_key = ? AND decks.name = ?
+            LEFT JOIN deck_cards ON deck_cards.card_id = cards.id
+            WHERE cards.identity_key = ?
             """,
-            (identity_key, deck_name),
+            (identity_key,),
         ).fetchone()

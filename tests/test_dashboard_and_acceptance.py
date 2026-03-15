@@ -67,8 +67,6 @@ def test_acceptance_flow_covers_import_review_and_catalog(client, app) -> None:
                 BytesIO("lemma_cs,translation_ru,notes\nkniha,книга,book note\n".encode("utf-8")),
                 "cards.csv",
             ),
-            "deck_id": "1",
-            "new_deck_name": "",
         },
         content_type="multipart/form-data",
     )
@@ -82,29 +80,19 @@ def test_acceptance_flow_covers_import_review_and_catalog(client, app) -> None:
     assert upload_response.status_code == 200
     assert "Добавлено карточек: 1" in upload_response.get_data(as_text=True)
     home_after_import = client.get("/").get_data(as_text=True)
-    assert "Всего карточек: 1" in home_after_import
-    assert "К повторению сегодня: 1" in home_after_import
-    assert 'action="/review"' in home_after_import
-    assert 'option value="1" selected' in home_after_import
+    assert "Пока нет карточек" in home_after_import
+    assert 'href="/import"' in home_after_import
 
     review_page = client.get("/review?deck=1")
     assert review_page.status_code == 200
-    assert "kniha" in review_page.get_data(as_text=True)
+    assert "Колода пуста" in review_page.get_data(as_text=True)
 
     card = repository.get_card_by_identity_key(build_identity_key("kniha", "книга"))
-    assert card is not None
-    review_response = client.post(f"/review/{card.id}/grade", data={"rating": "Good"})
-
-    assert review_response.status_code == 302
-    logs = repository.list_review_logs(card.id)
-    assert len(logs) == 1
-    assert logs[0].rating == "Good"
-
-    home_after_review = client.get("/").get_data(as_text=True)
-    assert "К повторению сегодня: 0" in home_after_review
+    assert card is None
     catalog_page = client.get("/cards?q=kniha").get_data(as_text=True)
     assert "kniha" in catalog_page
     assert "книга" in catalog_page
+    assert "Без колоды" in catalog_page
 
 
 def _extract_preview_token(page: str) -> str:

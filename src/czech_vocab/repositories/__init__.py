@@ -14,6 +14,7 @@ from czech_vocab.repositories.records import (
     ImportPreviewRecord,
     ReviewLogRecord,
     build_identity_key,
+    build_lemma_key,
 )
 from czech_vocab.repositories.schema import initialize_database
 from czech_vocab.repositories.settings_repository import AppSettingsRepository
@@ -31,5 +32,6 @@ __all__ = [
     "ImportPreviewRepository",
     "ReviewLogRecord",
     "build_identity_key",
+    "build_lemma_key",
     "initialize_database",
 ]

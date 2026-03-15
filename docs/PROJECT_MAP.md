@@ -22,10 +22,10 @@
   - SQLite schema bootstrap and seed defaults
   - FSRS adapter around the `fsrs` package
   - deck-aware review queue rules
-  - import preview persistence
-  - runtime deck membership now resolved through `deck_cards` joins rather than `cards.deck_id`
+  - import preview persistence into a global unassigned word base
+  - runtime deck membership resolved through `deck_cards` joins rather than `cards.deck_id`
 - Major missing or partial areas:
-  - global-base schema refactor has started: `cards` are now schema-level global rows with `deck_cards` links, but most repositories/services still assume the older deck-owned access pattern and are scheduled to be migrated next
+  - deck creation/population flows are planned but not implemented yet, so imported words remain unassigned until later steps link them to decks
   - no optimizer or FSRS parameter fitting
   - no auth or multi-user support
   - no delete flows for cards/decks
@@ -96,17 +96,17 @@
   - methods: `GET`
   - handler: `import_page()`
   - template: [`import.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/import.html)
-  - service used indirectly via `_render_import_page()`: [`DeckSettingsService`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/deck_settings_service.py)
-  - DB access: `decks`
+  - service used indirectly: none
+  - DB access: none
 
 - `/import/preview`
   - methods: `POST`
   - handler: `preview_import()`
   - template: `import.html`
   - service: [`ImportService`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/import_service.py)
-  - repositories: `DeckRepository`, `CardRepository`, `ImportPreviewRepository`
-  - inputs: `csv_file`, `deck_id`, `new_deck_name`
-  - DB access: `decks`, `cards`, `deck_cards`, `import_previews`
+  - repositories: `CardRepository`, `ImportPreviewRepository`
+  - inputs: `csv_file`
+  - DB access: `cards`, `import_previews`
 
 - `/import/confirm`
   - methods: `POST`
@@ -114,7 +114,7 @@
   - template: `import.html`
   - service: `ImportService`
   - inputs: `preview_token`
-  - DB access: `import_previews`, `decks`, `cards`, `deck_cards`
+  - DB access: `import_previews`, `cards`
 
 - `/review`
   - methods: `GET`
@@ -190,7 +190,7 @@
   - role: persistent global card content + scheduling state
   - important fields: `lemma_key`, `identity_key`, `lemma`, `translation`, `notes`, `metadata_json`, `fsrs_state_json`, `due_at`, `last_review_at`
   - uniqueness: `lemma_key`
-  - written by: import, review scheduling updates, card edit
+  - written by: global-base import, review scheduling updates, card edit
   - read by: review queue, dashboard, cards list, stats
 
 - `deck_cards`
@@ -198,7 +198,7 @@
   - important fields: `card_id`, `deck_id`, `created_at`
   - relations: `card_id -> cards.id`, `deck_id -> decks.id`
   - uniqueness: `card_id` is unique so a card can belong to at most one active deck
-  - written by: schema migration, card creation, import confirm, and card edit reassignment
+  - written by: schema migration, explicit deck assignment, and card edit reassignment
   - read by: review queue, dashboard, cards list, stats, and duplicate lookup by deck
 
 - `deck_population_drafts`
@@ -242,10 +242,10 @@
 - Service relations
   - `ImportService`
     - calls CSV parser
-    - resolves deck via `DeckSettingsService`
-    - checks duplicates via `CardRepository` deck lookups
+    - checks duplicates globally by Czech `lemma_key`
     - stores previews via `ImportPreviewRepository`
     - initializes FSRS state via `FsrsScheduler`
+    - persists cards as unassigned global rows with no `deck_cards` link
   - `StudyService`
     - reads deck defaults via `DeckSettingsService`
     - selects queue via `CardRepository`
@@ -279,8 +279,8 @@
 
 - Deck logic
   - default deck seeding and lookup: `schema.py`, `DeckRepository`
-  - import deck resolution: `DeckSettingsService.resolve_import_deck()`
   - selected review deck: route-level `_resolve_deck()` in `routes.py`
+  - deck membership reads/writes: `DeckCardRepository`
 
 - Settings logic
   - persistence: `settings_repository.py`, `deck_repository.py`
@@ -297,16 +297,16 @@
   - result: ready app with default deck/settings
 
 - CSV import flow
-  1. `GET /import` renders form and deck options
+  1. `GET /import` renders the global-base import form
   2. `POST /import/preview` reads upload bytes
-  3. `ImportService` parses CSV and computes duplicates/rejections
+  3. `ImportService` parses CSV and computes global Czech-lemma duplicates/rejections
   4. preview persists in `import_previews`
-  5. `POST /import/confirm` resolves/creates deck and inserts new cards
+  5. `POST /import/confirm` inserts new unassigned global cards
   6. each imported card gets default FSRS state
   7. preview token is deleted
   - modules: `routes.py` -> `ImportService` -> CSV parser / repositories / `FsrsScheduler`
-  - tables affected: `import_previews`, `decks`, `cards`
-  - result: new cards inserted, duplicates skipped
+  - tables affected: `import_previews`, `cards`
+  - result: new global cards inserted without deck links, duplicates skipped
 
 - Review flow
   1. `GET /review?deck=<id>` resolves deck
@@ -331,8 +331,8 @@
   1. `GET /cards` collects filters from query params
   2. `CardCatalogService.get_page()` loads cards + learned-state flag
   3. service filters in Python and returns paginated view model
-  4. template renders single list view
-  - tables affected: read-only `cards`, `decks`, `review_logs`
+  4. template renders single list view, including unassigned cards under `Без колоды`
+  - tables affected: read-only `cards`, `deck_cards`, `decks`, `review_logs`
   - result: filtered card catalog
 
 - Card edit flow
@@ -457,6 +457,9 @@
 
 - Filtering strategy in cards catalog
   - catalog filtering is partly done in Python after loading rows; performance assumptions are acceptable now but could become pressure points with large datasets.
+
+- Dashboard is deck-linked, not global-base aware
+  - unassigned imported cards do not contribute to dashboard totals or review availability until later deck-population work links them.
 
 ## 13. Fast navigation checklist for future agents
 

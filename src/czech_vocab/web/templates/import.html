@@ -4,7 +4,7 @@
 {% block page_eyebrow %}CSV{% endblock %}
 {% block page_title %}Импорт словаря{% endblock %}
 {% block page_intro %}
-  <p>Загрузите CSV-файл, проверьте предпросмотр и подтвердите импорт в выбранную колоду.</p>
+  <p>Загрузите CSV-файл, проверьте предпросмотр и подтвердите импорт в глобальную базу слов.</p>
 {% endblock %}
 
 {% block content %}
@@ -17,18 +17,7 @@
     >
       <label class="field-label" for="csv_file">CSV-файл</label>
       <input id="csv_file" type="file" name="csv_file" accept=".csv,text/csv" required>
-
-      <label class="field-label" for="deck_id">Существующая колода</label>
-      <select id="deck_id" name="deck_id">
-        {% for deck in decks %}
-          <option value="{{ deck.id }}"{% if form_state.deck_id == deck.id %} selected{% endif %}>
-            {{ deck.name }}
-          </option>
-        {% endfor %}
-      </select>
-
-      <label class="field-label" for="new_deck_name">Или создайте новую колоду</label>
-      <input id="new_deck_name" type="text" name="new_deck_name" value="{{ form_state.new_deck_name }}">
+      <p><strong>Назначение:</strong> Глобальная база</p>
 
       <button class="button button--primary" type="submit" data-busy-label="Готовим предпросмотр...">
         Показать предпросмотр
@@ -56,14 +45,14 @@
   {% if preview %}
     <section class="panel">
       <h2 class="panel__title">Предпросмотр импорта</h2>
-      <p>Целевая колода: {{ preview.target_deck_name }}</p>
+      <p>Назначение: {{ preview.target_deck_name }}</p>
       <p>Готово к импорту: {{ preview.ready_count }}</p>
       <p>Дубликаты будут пропущены: {{ preview.duplicate_count }}</p>
       <p>Отклонено строк: {{ preview.rejected_count }}</p>
       {% if preview.duplicate_count %}
         <div class="state-panel state-panel--warning">
           <h3 class="state-panel__title">Найдены дубликаты</h3>
-          <p>Эти карточки уже есть в выбранной колоде и будут пропущены при подтверждении импорта.</p>
+          <p>Эти карточки уже есть в глобальной базе и будут пропущены при подтверждении импорта.</p>
         </div>
       {% endif %}
       {% if preview.rejected_messages %}
@@ -103,14 +92,14 @@
           Импорт завершён
         {% endif %}
       </h2>
-      <p>Целевая колода: {{ result.target_deck_name }}</p>
+      <p>Назначение: {{ result.target_deck_name }}</p>
       <p>Добавлено карточек: {{ result.imported_count }}</p>
       <p>Пропущено дубликатов: {{ result.duplicate_count }}</p>
       <p>Отклонено строк: {{ result.rejected_count }}</p>
       {% if result.imported_count == 0 and result.duplicate_count > 0 %}
         <div class="state-panel state-panel--warning">
-          <h3 class="state-panel__title">Все строки уже есть в колоде</h3>
-          <p>Проверьте CSV или выберите другую колоду, если хотите импортировать эти слова отдельно.</p>
+          <h3 class="state-panel__title">Все строки уже есть в базе</h3>
+          <p>Проверьте CSV или измените исходные слова, если хотите добавить другие карточки в глобальную базу.</p>
         </div>
       {% endif %}
       {% if result.rejected_messages %}

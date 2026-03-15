@@ -49,6 +49,15 @@ class CardRepository:
         query = f"{CARD_SELECT} WHERE deck_cards.deck_id = ? AND cards.identity_key = ?"
         return self._fetch_one(query, (deck_id, identity_key), connection=connection)
 
+    def get_card_by_lemma_key(
+        self,
+        lemma_key: str,
+        *,
+        connection: sqlite3.Connection | None = None,
+    ) -> CardRecord | None:
+        query = f"{CARD_SELECT} WHERE cards.lemma_key = ?"
+        return self._fetch_one(query, (lemma_key,), connection=connection)
+
     def create_card(
         self,
         card: CardCreate,

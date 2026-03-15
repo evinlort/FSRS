@@ -1,10 +1,13 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
+from czech_vocab.repositories import CardRepository, build_identity_key
 from czech_vocab.services.import_service import ImportService
 
 
-def test_preview_lifecycle_persists_rows_and_confirm_skips_duplicates(tmp_path: Path) -> None:
+def test_preview_lifecycle_persists_unassigned_rows_and_confirm_skips_duplicates(
+    tmp_path: Path,
+) -> None:
     database_path = tmp_path / "import.sqlite3"
     service = build_service(database_path)
     imported_at = datetime(2026, 3, 14, 12, 0, tzinfo=UTC)
@@ -12,17 +15,24 @@ def test_preview_lifecycle_persists_rows_and_confirm_skips_duplicates(tmp_path: 
     first_preview = service.create_preview_from_text(
         "lemma_cs,translation_ru,notes\nkniha,книга,first\n",
         imported_at=imported_at,
-        deck_name="Основная",
     )
     first_result = service.confirm_preview(first_preview.token)
 
     assert first_result.imported_count == 1
     assert first_result.duplicate_count == 0
+    assert first_result.target_deck_name == "Глобальная база"
+    repository = CardRepository(database_path)
+    assert (
+        repository.get_card_by_identity_key(build_identity_key("kniha", "книга"), deck_id=1)
+        is None
+    )
+    stored = repository.get_card_by_lemma_key("kniha")
+    assert stored is not None
+    assert stored.deck_id is None
 
     second_preview = service.create_preview_from_text(
-        "lemma_cs,translation_ru,notes\nkniha,книга,second\n",
+        "lemma_cs,translation_ru,notes\nkniha,издание,second\n",
         imported_at=imported_at,
-        deck_name="Основная",
     )
 
     assert second_preview.duplicate_count == 1
@@ -39,7 +49,6 @@ def test_preview_reports_missing_headers_without_persisted_token(tmp_path: Path)
     preview = service.create_preview_from_text(
         "notes\nmissing headers\n",
         imported_at=datetime(2026, 3, 14, 12, 0, tzinfo=UTC),
-        deck_name="Основная",
     )
 
     assert preview.token is None

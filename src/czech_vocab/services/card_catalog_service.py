@@ -18,6 +18,9 @@ class CatalogDeckOption:
     label: str
 
 
+UNASSIGNED_DECK_LABEL = "Без колоды"
+
+
 @dataclass(frozen=True)
 class CatalogCard:
     card_id: int
@@ -114,7 +117,7 @@ class CardCatalogService:
                 SELECT
                     cards.*,
                     deck_cards.deck_id AS deck_id,
-                    decks.name AS deck_name,
+                    COALESCE(decks.name, ?) AS deck_name,
                     EXISTS (
                         SELECT 1
                         FROM review_logs
@@ -122,10 +125,11 @@ class CardCatalogService:
                           AND review_logs.undone_at IS NULL
                     ) AS is_learned
                 FROM cards
-                JOIN deck_cards ON deck_cards.card_id = cards.id
-                JOIN decks ON decks.id = deck_cards.deck_id
+                LEFT JOIN deck_cards ON deck_cards.card_id = cards.id
+                LEFT JOIN decks ON decks.id = deck_cards.deck_id
                 ORDER BY cards.lemma, cards.id
-                """
+                """,
+                (UNASSIGNED_DECK_LABEL,),
             ).fetchall()
         return [dict(row) for row in rows]
 
