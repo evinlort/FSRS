@@ -27,10 +27,12 @@ class DeckSettingsService:
         *,
         default_desired_retention: float,
         default_daily_new_limit: int,
+        default_target_deck_card_count: int,
     ) -> AppSettingsRecord:
         return self._settings_repository.update_settings(
             default_desired_retention=default_desired_retention,
             default_daily_new_limit=default_daily_new_limit,
+            default_target_deck_card_count=default_target_deck_card_count,
         )
 
     def create_deck(self, name: str) -> DeckRecord:

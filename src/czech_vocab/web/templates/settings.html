@@ -33,6 +33,19 @@
       {% if settings_page.errors.default_daily_new_limit %}
         <p class="field-error">{{ settings_page.errors.default_daily_new_limit }}</p>
       {% endif %}
+
+      <label class="field-label" for="default_target_deck_card_count">
+        Размер новой колоды по умолчанию
+      </label>
+      <input
+        id="default_target_deck_card_count"
+        name="default_target_deck_card_count"
+        inputmode="numeric"
+        value="{{ settings_page.default_target_deck_card_count }}"
+      >
+      {% if settings_page.errors.default_target_deck_card_count %}
+        <p class="field-error">{{ settings_page.errors.default_target_deck_card_count }}</p>
+      {% endif %}
     </section>
 
     <section class="panel settings-panel">

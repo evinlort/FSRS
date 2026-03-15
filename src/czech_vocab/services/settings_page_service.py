@@ -6,6 +6,7 @@ from czech_vocab.repositories import AppSettingsRepository, DeckRepository
 
 RETENTION_ERROR = "Укажите retention числом от 0 до 1."
 NEW_LIMIT_ERROR = "Лимит новых карточек должен быть целым числом 0 или больше."
+TARGET_COUNT_ERROR = "Размер новой колоды должен быть целым числом 1 или больше."
 
 
 @dataclass(frozen=True)
@@ -20,6 +21,7 @@ class SettingsDeckData:
 class SettingsPageData:
     default_desired_retention: str
     default_daily_new_limit: str
+    default_target_deck_card_count: str
     decks: list[SettingsDeckData]
     errors: dict[str, str]
 
@@ -56,6 +58,10 @@ class SettingsPageService:
                 "default_daily_new_limit",
                 str(settings.default_daily_new_limit),
             ),
+            default_target_deck_card_count=defaults.get(
+                "default_target_deck_card_count",
+                str(settings.default_target_deck_card_count),
+            ),
             decks=[
                 SettingsDeckData(
                     deck_id=deck.id,
@@ -79,12 +85,14 @@ class SettingsPageService:
         *,
         default_desired_retention: str,
         default_daily_new_limit: str,
+        default_target_deck_card_count: str,
         deck_updates: dict[int, dict[str, str]],
     ) -> SettingsPageData:
         page_data = self.get_page_data(
             default_values={
                 "default_desired_retention": default_desired_retention,
                 "default_daily_new_limit": default_daily_new_limit,
+                "default_target_deck_card_count": default_target_deck_card_count,
             },
             deck_values=deck_updates,
         )
@@ -96,6 +104,7 @@ class SettingsPageService:
                     default_values={
                         "default_desired_retention": default_desired_retention,
                         "default_daily_new_limit": default_daily_new_limit,
+                        "default_target_deck_card_count": default_target_deck_card_count,
                     },
                     deck_values=deck_updates,
                 )
@@ -104,6 +113,7 @@ class SettingsPageService:
             self._settings_repository.update_settings(
                 default_desired_retention=float(default_desired_retention),
                 default_daily_new_limit=int(default_daily_new_limit),
+                default_target_deck_card_count=int(default_target_deck_card_count),
                 connection=connection,
             )
             for deck in page_data.decks:
@@ -128,6 +138,8 @@ def _collect_errors(page_data: SettingsPageData) -> dict[str, str]:
         errors["default_desired_retention"] = RETENTION_ERROR
     if not _is_valid_new_limit(page_data.default_daily_new_limit):
         errors["default_daily_new_limit"] = NEW_LIMIT_ERROR
+    if not _is_valid_target_count(page_data.default_target_deck_card_count):
+        errors["default_target_deck_card_count"] = TARGET_COUNT_ERROR
     for deck in page_data.decks:
         if not _is_valid_retention(deck.desired_retention):
             errors[f"deck_{deck.deck_id}_desired_retention"] = RETENTION_ERROR
@@ -150,6 +162,14 @@ def _is_valid_new_limit(raw_value: str) -> bool:
     except ValueError:
         return False
     return value >= 0
+
+
+def _is_valid_target_count(raw_value: str) -> bool:
+    try:
+        value = int(raw_value)
+    except ValueError:
+        return False
+    return value >= 1
 
 
 def _format_retention(value: float) -> str:

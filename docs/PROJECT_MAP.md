@@ -169,7 +169,7 @@
   - handlers: `settings_page()`, `update_settings_page()`
   - template: [`settings.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/settings.html)
   - service: [`SettingsPageService`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/settings_page_service.py)
-  - inputs: global defaults plus `deck_<id>_desired_retention` and `deck_<id>_daily_new_limit`
+  - inputs: global defaults `default_desired_retention`, `default_daily_new_limit`, `default_target_deck_card_count`, plus `deck_<id>_desired_retention` and `deck_<id>_daily_new_limit`
   - DB access: `app_settings`, `decks`
 
 ## 6. Database map
@@ -271,6 +271,7 @@
     - prepares settings form data
     - validates numeric inputs
     - writes app and deck settings in one SQLite transaction
+    - owns validation for `default_target_deck_card_count >= 1`
 
 - Review state transitions
   - queue selection: `StudyService.get_queue_state()`
@@ -352,7 +353,7 @@
 - Settings flow
   1. `GET /settings` loads current app + deck settings
   2. `POST /settings` validates string inputs
-  3. `SettingsPageService` writes app settings and all deck settings in one DB transaction
+  3. `SettingsPageService` writes app settings, including the default deck target count, and all deck settings in one DB transaction
   - tables affected: `app_settings`, `decks`
   - result: persisted review defaults
 

@@ -25,6 +25,7 @@ class AppSettingsRepository:
         *,
         default_desired_retention: float,
         default_daily_new_limit: int,
+        default_target_deck_card_count: int,
         connection: sqlite3.Connection | None = None,
     ) -> AppSettingsRecord:
         timestamp = serialize_datetime(utc_now())
@@ -32,10 +33,19 @@ class AppSettingsRepository:
             active_connection.execute(
                 """
                 UPDATE app_settings
-                SET default_desired_retention = ?, default_daily_new_limit = ?, updated_at = ?
+                SET
+                    default_desired_retention = ?,
+                    default_daily_new_limit = ?,
+                    default_target_deck_card_count = ?,
+                    updated_at = ?
                 WHERE id = 1
                 """,
-                (default_desired_retention, default_daily_new_limit, timestamp),
+                (
+                    default_desired_retention,
+                    default_daily_new_limit,
+                    default_target_deck_card_count,
+                    timestamp,
+                ),
             )
             row = active_connection.execute(
                 "SELECT * FROM app_settings WHERE id = 1"

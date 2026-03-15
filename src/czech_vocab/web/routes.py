@@ -257,6 +257,10 @@ def _settings_form_payload(service: SettingsPageService) -> dict[str, object]:
     return {
         "default_desired_retention": request.form.get("default_desired_retention", ""),
         "default_daily_new_limit": request.form.get("default_daily_new_limit", ""),
+        "default_target_deck_card_count": request.form.get(
+            "default_target_deck_card_count",
+            "",
+        ),
         "deck_updates": {
             deck.deck_id: {
                 "desired_retention": request.form.get(
