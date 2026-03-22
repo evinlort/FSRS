@@ -38,6 +38,31 @@ def test_queue_serves_due_learned_cards_before_new_cards(tmp_path: Path) -> None
     assert queue.empty_reason is None
 
 
+def test_queue_randomizes_due_learned_cards_before_selection(tmp_path: Path) -> None:
+    service = build_service(tmp_path / "study.sqlite3", shuffler=reverse_cards)
+    now = datetime(2026, 3, 14, 12, 0, tzinfo=UTC)
+    first_due = create_card(
+        service,
+        "auto",
+        "машина",
+        due_at=now - timedelta(days=2),
+        learned=True,
+    )
+    second_due = create_card(
+        service,
+        "vlak",
+        "поезд",
+        due_at=now - timedelta(hours=1),
+        learned=True,
+    )
+
+    queue = service.get_queue_state(now=now)
+
+    assert queue.card is not None
+    assert queue.card.card_id == second_due.id
+    assert queue.card.card_id != first_due.id
+
+
 def test_queue_is_isolated_to_selected_deck(tmp_path: Path) -> None:
     service = build_service(tmp_path / "study.sqlite3")
     settings = DeckSettingsService(tmp_path / "study.sqlite3")
@@ -69,6 +94,19 @@ def test_queue_reports_no_due_cards_when_only_future_learned_cards_exist(tmp_pat
 
     assert queue.card is None
     assert queue.empty_reason == "no_due_cards"
+
+
+def test_queue_randomizes_new_cards_before_selection(tmp_path: Path) -> None:
+    service = build_service(tmp_path / "study.sqlite3", shuffler=reverse_cards)
+    now = datetime(2026, 3, 14, 12, 0, tzinfo=UTC)
+    first_new = create_card(service, "pes", "собака", due_at=now, learned=False)
+    second_new = create_card(service, "strom", "дерево", due_at=now, learned=False)
+
+    queue = service.get_queue_state(now=now)
+
+    assert queue.card is not None
+    assert queue.card.card_id == second_new.id
+    assert queue.card.card_id != first_new.id
 
 
 def test_queue_reports_new_limit_reached_when_new_cards_remain(tmp_path: Path) -> None:
@@ -178,9 +216,13 @@ def test_invalid_rating_does_not_mutate_database(tmp_path: Path) -> None:
     assert service._repository.list_review_logs(created.id) == []
 
 
-def build_service(database_path: Path) -> StudyService:
+def build_service(database_path: Path, *, shuffler=None) -> StudyService:
     initialize_database(database_path)
-    return StudyService(database_path, scheduler=FsrsScheduler(enable_fuzzing=False))
+    return StudyService(
+        database_path,
+        scheduler=FsrsScheduler(enable_fuzzing=False),
+        shuffler=shuffler,
+    )
 
 
 def create_card(
@@ -230,3 +272,7 @@ def create_card(
     updated = service._repository.get_card_by_id(created.id)
     assert updated is not None
     return updated
+
+
+def reverse_cards(cards):
+    return list(reversed(cards))

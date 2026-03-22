@@ -21,7 +21,7 @@
   - server-rendered UI shell and pages
   - SQLite schema bootstrap and seed defaults
   - FSRS adapter around the `fsrs` package
-  - deck-aware review queue rules
+  - deck-aware review queue rules with randomized order inside due/new groups
   - import preview persistence into a global unassigned word base
   - combined CSV-to-deck preview and creation flow that updates existing lemma matches and assigns accepted rows directly to a new deck
   - runtime deck membership resolved through `deck_cards` joins rather than `cards.deck_id`
@@ -306,7 +306,8 @@
     - reassigns every accepted card into the newly created deck through `deck_cards`
   - `StudyService`
     - reads deck defaults via `DeckSettingsService`
-    - selects queue via `CardRepository`
+    - selects deck-scoped queue via `CardRepository`
+    - randomizes order inside learned-due and new-card groups before picking the next card
     - applies review via `FsrsScheduler`
     - writes `cards` and `review_logs`
   - `DashboardService`
@@ -586,7 +587,7 @@
   - there is no migration tool. Future schema changes must be handled carefully inside `initialize_database()`.
 
 - Deck selection logic is split
-  - routes resolve current deck for review pages, while queue rules live in `StudyService`. Changes to default/selected deck behavior can drift if updated in only one place.
+  - routes resolve current deck for review pages, while queue rules and within-group randomization live in `StudyService`. Changes to default/selected deck behavior can drift if updated in only one place.
 
 - Import preview persistence is DB-backed
   - preview confirmation depends on `import_previews` tokens and stored serialized rows; schema changes there can break import confirmation.

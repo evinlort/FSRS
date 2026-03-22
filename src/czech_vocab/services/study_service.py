@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from random import sample
+from typing import Callable
 
 from czech_vocab.domain import FsrsScheduler
 from czech_vocab.repositories import CardRecord, CardRepository
@@ -34,10 +36,17 @@ class QueueState:
 
 
 class StudyService:
-    def __init__(self, database_path: Path, *, scheduler: FsrsScheduler | None = None) -> None:
+    def __init__(
+        self,
+        database_path: Path,
+        *,
+        scheduler: FsrsScheduler | None = None,
+        shuffler: Callable[[list[CardRecord]], list[CardRecord]] | None = None,
+    ) -> None:
         self._repository = CardRepository(database_path)
         self._deck_settings_service = DeckSettingsService(database_path)
         self._scheduler = scheduler or FsrsScheduler()
+        self._shuffler = shuffler or _shuffle_cards
 
     def get_next_due_card(self, *, now: datetime, deck_id: int | None = None) -> StudyCard | None:
         return self.get_queue_state(now=now, deck_id=deck_id).card
@@ -46,7 +55,9 @@ class StudyService:
         active_deck_id = deck_id or self._deck_settings_service.get_default_deck().id
         if self._repository.count_cards_in_deck(active_deck_id) == 0:
             return QueueState(card=None, empty_reason="no_cards")
-        due_cards = self._repository.query_due_learned_cards(deck_id=active_deck_id, now=now)
+        due_cards = self._shuffler(
+            self._repository.query_due_learned_cards(deck_id=active_deck_id, now=now)
+        )
         if due_cards:
             return QueueState(card=_to_study_card(due_cards[0]), empty_reason=None)
         new_cards = self._repository.query_new_cards(deck_id=active_deck_id)
@@ -54,6 +65,7 @@ class StudyService:
             return QueueState(card=None, empty_reason="no_due_cards")
         if self._new_limit_reached(deck_id=active_deck_id, now=now):
             return QueueState(card=None, empty_reason="new_limit_reached")
+        new_cards = self._shuffler(new_cards)
         return QueueState(card=_to_study_card(new_cards[0]), empty_reason=None)
 
     def submit_review(
@@ -161,3 +173,9 @@ def _to_study_card(card: CardRecord) -> StudyCard:
         metadata=card.metadata,
         due_at=card.due_at,
     )
+
+
+def _shuffle_cards(cards: list[CardRecord]) -> list[CardRecord]:
+    if len(cards) < 2:
+        return list(cards)
+    return sample(cards, k=len(cards))

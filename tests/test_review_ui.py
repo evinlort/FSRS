@@ -48,7 +48,7 @@ def test_review_page_shows_contextual_empty_state_when_no_cards_are_available(cl
 
 
 def test_review_page_shows_distinct_no_due_state_with_catalog_link(client, app) -> None:
-    due_at = datetime(2026, 3, 16, 12, 0, tzinfo=UTC)
+    due_at = datetime(2099, 3, 16, 12, 0, tzinfo=UTC)
     create_due_card(
         app.config["DATABASE_PATH"],
         lemma="okno",
