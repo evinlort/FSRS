@@ -8,6 +8,7 @@ from czech_vocab.repositories import (
     CardRepository,
     DeckRepository,
     ReviewLogRecord,
+    build_identity_key,
     initialize_database,
 )
 from czech_vocab.web.app import create_app
@@ -99,6 +100,7 @@ def test_update_imported_content_preserves_schedule_state(tmp_path: Path) -> Non
     assert updated.translation == "поезд новый"
     assert updated.notes == "new note"
     assert updated.metadata == {"topic": "transport"}
+    assert updated.identity_key == build_identity_key("vlak nový", "поезд новый")
     assert updated.fsrs_state == {"state": "review", "stability": 5.2}
     assert updated.due_at == due_at
 

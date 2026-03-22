@@ -23,11 +23,12 @@
   - FSRS adapter around the `fsrs` package
   - deck-aware review queue rules
   - import preview persistence into a global unassigned word base
+  - combined CSV-to-deck preview and creation flow that updates existing lemma matches and assigns accepted rows directly to a new deck
   - runtime deck membership resolved through `deck_cards` joins rather than `cards.deck_id`
   - deck creation with random, manual, and mixed selection flows backed by server-side SQLite drafts
   - random, manual, and mixed add-to-existing-deck flows from the global available pool
 - Major missing or partial areas:
-  - imported words remain unassigned until a deck-creation or future add-to-deck flow links them
+  - the legacy global-base import flow still leaves imported words unassigned; only the dedicated CSV-to-deck flow assigns them immediately
   - no optimizer or FSRS parameter fitting
   - no auth or multi-user support
   - no delete flows for cards/decks
@@ -117,6 +118,30 @@
   - service: `ImportService`
   - inputs: `preview_token`
   - DB access: `import_previews`, `cards`
+
+- `/decks/import`
+  - methods: `GET`
+  - handler: `deck_import_page()` in [`routes.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/routes.py)
+  - template: [`deck_import.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/deck_import.html)
+  - service used indirectly: none
+  - DB access: none
+
+- `/decks/import/preview`
+  - methods: `POST`
+  - handler: `preview_deck_import()`
+  - template: `deck_import.html`
+  - service: [`CsvDeckImportService`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/csv_deck_import_service.py)
+  - repositories via service: `CardRepository`, `DeckCardRepository`, `DeckRepository`, `ImportPreviewRepository`
+  - inputs: `deck_name`, `csv_file`
+  - DB access: `cards`, `decks`, `import_previews`
+
+- `/decks/import/confirm`
+  - methods: `POST`
+  - handler: `confirm_deck_import()`
+  - template on error: `deck_import.html`
+  - service: `CsvDeckImportService`
+  - inputs: `preview_token`
+  - DB access: `import_previews`, `cards`, `deck_cards`, `decks`, `app_settings`
 
 - `/decks/new`
   - methods: `GET`, `POST`
@@ -244,7 +269,7 @@
   - role: persisted preview state between upload and confirm
   - important fields: `token`, `deck_name`, `rows_json`, `rejected_messages_json`, `duplicate_count`, `imported_at`
   - written by: `ImportPreviewRepository.create_preview()`
-  - consumed/deleted by: `ImportService.confirm_preview()`
+  - consumed/deleted by: `ImportService.confirm_preview()` and `CsvDeckImportService.confirm_preview()`
 
 - Schema ownership:
   - source of truth: [`schema.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/repositories/schema.py) and [`schema_migrations.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/repositories/schema_migrations.py)
@@ -273,6 +298,12 @@
     - stores previews via `ImportPreviewRepository`
     - initializes FSRS state via `FsrsScheduler`
     - persists cards as unassigned global rows with no `deck_cards` link
+  - `CsvDeckImportService`
+    - calls the same CSV parser but validates a required `deck_name` and never accepts a requested count
+    - deduplicates rows inside the CSV by Czech `lemma_key`
+    - stores accepted rows in `import_previews` for preview/confirm
+    - creates missing cards with default FSRS state and updates existing global cards in place
+    - reassigns every accepted card into the newly created deck through `deck_cards`
   - `StudyService`
     - reads deck defaults via `DeckSettingsService`
     - selects queue via `CardRepository`
@@ -354,6 +385,17 @@
   - modules: `routes.py` -> `ImportService` -> CSV parser / repositories / `FsrsScheduler`
   - tables affected: `import_previews`, `cards`
   - result: new global cards inserted without deck links, duplicates skipped
+
+- CSV-to-deck creation flow
+  1. `GET /decks/import` renders a dedicated form with only `deck_name` and `csv_file`
+  2. `POST /decks/import/preview` parses the CSV, validates the deck name, and deduplicates rows inside the file
+  3. `CsvDeckImportService` classifies accepted rows as create vs update and persists the preview in `import_previews`
+  4. `POST /decks/import/confirm` creates the new deck from app defaults
+  5. missing cards are created with default FSRS state, matched cards are updated in place, and every accepted card is assigned to the new deck
+  6. preview token is deleted and the user is redirected to `/` with the standard deck-created flash
+  - modules: `routes.py` -> `CsvDeckImportService` -> CSV parser / repositories / `FsrsScheduler`
+  - tables affected: `import_previews`, `decks`, `cards`, `deck_cards`, `app_settings`
+  - result: one confirmed CSV creates a new deck containing all accepted unique rows without using the target-count setting
 
 - Review flow
   1. `GET /review?deck=<id>` resolves deck

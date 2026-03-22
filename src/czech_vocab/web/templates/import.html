@@ -6,6 +6,9 @@
 {% block page_intro %}
   <p>Загрузите CSV-файл, проверьте предпросмотр и подтвердите импорт в глобальную базу слов.</p>
 {% endblock %}
+{% block page_actions %}
+  <a class="button" href="{{ url_for('main.deck_import_page') }}">Создать колоду из CSV</a>
+{% endblock %}
 
 {% block content %}
   <section class="panel">

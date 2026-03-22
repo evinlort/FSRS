@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Колода из CSV{% endblock %}
+{% block page_eyebrow %}CSV{% endblock %}
+{% block page_title %}Создать колоду из CSV{% endblock %}
+{% block page_intro %}
+  <p>Загрузите CSV-файл, проверьте предпросмотр и создайте колоду из принятых строк без отдельного лимита по количеству карточек.</p>
+{% endblock %}
+{% block page_actions %}
+  <a class="button" href="{{ url_for('main.import_page') }}">Открыть обычный импорт</a>
+{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <form
+      method="post"
+      enctype="multipart/form-data"
+      action="{{ url_for('main.preview_deck_import') }}"
+      data-busy-form
+    >
+      <label class="field-label" for="deck_name">Название колоды</label>
+      <input id="deck_name" name="deck_name" value="{{ form_state.deck_name }}">
+      {% if errors.deck_name %}
+        <p class="field-error">{{ errors.deck_name }}</p>
+      {% endif %}
+
+      <label class="field-label" for="csv_file">CSV-файл</label>
+      <input id="csv_file" type="file" name="csv_file" accept=".csv,text/csv" required>
+      {% if errors.csv_file %}
+        <p class="field-error">{{ errors.csv_file }}</p>
+      {% endif %}
+
+      {% if errors.form %}
+        <div class="state-panel state-panel--error">
+          <h2 class="state-panel__title">Колоду создать не удалось</h2>
+          <p>{{ errors.form }}</p>
+        </div>
+      {% endif %}
+
+      <button class="button button--primary" type="submit" data-busy-label="Готовим предпросмотр...">
+        Показать предпросмотр
+      </button>
+    </form>
+  </section>
+
+  {% if error_title %}
+    <section class="panel state-panel state-panel--error">
+      <h2 class="panel__title state-panel__title">{{ error_title }}</h2>
+      <p>{{ error_message }}</p>
+      {% if error_details %}
+        <ul>
+          {% for detail in error_details %}
+            <li>{{ detail }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      <div class="action-row">
+        <a class="button button--primary" href="{{ url_for('main.deck_import_page') }}">Начать заново</a>
+      </div>
+    </section>
+  {% endif %}
+
+  {% if preview %}
+    <section class="panel">
+      <h2 class="panel__title">Предпросмотр создания колоды</h2>
+      <p>Назначение: {{ preview.target_deck_name }}</p>
+      <p>Готово для колоды: {{ preview.accepted_count }}</p>
+      <p>Новых карточек: {{ preview.created_count }}</p>
+      <p>Обновится карточек: {{ preview.updated_count }}</p>
+      <p>Дубликаты в CSV пропущены: {{ preview.duplicate_count }}</p>
+      <p>Отклонено строк: {{ preview.rejected_count }}</p>
+      {% if preview.updated_count %}
+        <div class="state-panel state-panel--warning">
+          <h3 class="state-panel__title">Найдены существующие карточки</h3>
+          <p>Совпавшие слова будут обновлены из CSV и перемещены в новую колоду.</p>
+        </div>
+      {% endif %}
+      {% if preview.accepted_count == 0 %}
+        <div class="state-panel state-panel--warning">
+          <h3 class="state-panel__title">Нет строк для создания колоды.</h3>
+          <p>Исправьте CSV-файл и загрузите его заново.</p>
+        </div>
+      {% endif %}
+      {% if preview.rejected_messages %}
+        <ul>
+          {% for message in preview.rejected_messages %}
+            <li>{{ message }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      {% if preview.sample_rows %}
+        <ol class="summary-list">
+          {% for row in preview.sample_rows %}
+            <li>
+              <strong>{{ row.lemma }}</strong>
+              <span>{{ row.translation }}</span>
+            </li>
+          {% endfor %}
+        </ol>
+      {% endif %}
+      {% if preview.token %}
+        <form method="post" action="{{ url_for('main.confirm_deck_import') }}" data-busy-form>
+          <input type="hidden" name="preview_token" value="{{ preview.token }}">
+          <button class="button button--primary" type="submit" data-busy-label="Создаём колоду...">
+            Создать колоду из CSV
+          </button>
+        </form>
+      {% endif %}
+    </section>
+  {% endif %}
+{% endblock %}

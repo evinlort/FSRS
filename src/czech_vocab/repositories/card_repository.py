@@ -9,6 +9,7 @@ from czech_vocab.repositories.records import (
     CardCreate,
     CardRecord,
     ReviewLogRecord,
+    build_identity_key,
     build_lemma_key,
     dump_json,
     matches_query,
@@ -130,7 +131,7 @@ class CardRepository:
     ) -> None:
         self._update_card_fields(
             card_id=card_id,
-            identity_key=None,
+            identity_key=build_identity_key(lemma, translation),
             lemma=lemma,
             translation=translation,
             notes=notes,

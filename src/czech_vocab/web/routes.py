@@ -21,6 +21,7 @@ from czech_vocab.services import (
     CardEditForm,
     CardEditMetadataRow,
     CardEditService,
+    CsvDeckImportService,
     DashboardService,
     DeckAddService,
     DeckCreateService,
@@ -51,6 +52,62 @@ def favicon():
 @main_bp.get("/import")
 def import_page() -> str:
     return _render_import_page()
+
+
+@main_bp.get("/decks/import")
+def deck_import_page() -> str:
+    return _render_deck_import_page()
+
+
+@main_bp.post("/decks/import/preview")
+def preview_deck_import():
+    form_state = _deck_import_form_state()
+    errors = _validate_deck_import_form(form_state)
+    if errors:
+        return _render_deck_import_page(form_state=form_state, errors=errors), 400
+    file = request.files.get("csv_file")
+    assert file is not None
+    service = CsvDeckImportService(current_app.config["DATABASE_PATH"])
+    try:
+        preview = service.create_preview_from_bytes(
+            deck_name=form_state["deck_name"],
+            csv_bytes=file.read(),
+        )
+    except ValueError as exc:
+        return _render_deck_import_page(
+            form_state=form_state,
+            errors={"deck_name": _deck_import_error_message(str(exc))},
+        ), 400
+    if preview.error_message:
+        error_title, error_message = _preview_error_context(preview.error_message)
+        return _render_deck_import_page(
+            form_state=form_state,
+            preview=preview,
+            error_title=error_title,
+            error_message=error_message,
+            error_details=[preview.error_message],
+        )
+    return _render_deck_import_page(form_state=form_state, preview=preview)
+
+
+@main_bp.post("/decks/import/confirm")
+def confirm_deck_import():
+    preview_token = request.form.get("preview_token", "")
+    service = CsvDeckImportService(current_app.config["DATABASE_PATH"])
+    try:
+        result = service.confirm_preview(preview_token)
+    except LookupError:
+        return _render_deck_import_page(
+            error_title="Предпросмотр недоступен.",
+            error_message="Загрузите CSV-файл заново, чтобы создать колоду.",
+        )
+    except ValueError as exc:
+        return _render_deck_import_page(
+            error_title="Создать колоду не удалось.",
+            error_message=_deck_import_confirm_error_message(str(exc)),
+        ), 400
+    flash(_deck_created_flash(result.deck_name, result.assigned_count), "success")
+    return redirect(url_for("main.home"))
 
 
 @main_bp.get("/decks/new")
@@ -403,6 +460,26 @@ def _render_import_page(
     )
 
 
+def _render_deck_import_page(
+    *,
+    form_state: dict[str, object] | None = None,
+    preview=None,
+    error_title: str | None = None,
+    error_message: str | None = None,
+    error_details: list[str] | None = None,
+    errors: dict[str, str] | None = None,
+) -> str:
+    return render_template(
+        "deck_import.html",
+        form_state=form_state or {"deck_name": ""},
+        preview=preview,
+        error_title=error_title,
+        error_message=error_message,
+        error_details=error_details or [],
+        errors=errors or {},
+    )
+
+
 def _render_settings_page() -> str:
     service = SettingsPageService(current_app.config["DATABASE_PATH"])
     return render_template("settings.html", settings_page=service.get_page_data())
@@ -495,6 +572,20 @@ def _settings_form_payload(service: SettingsPageService) -> dict[str, object]:
     }
 
 
+def _deck_import_form_state() -> dict[str, str]:
+    return {"deck_name": request.form.get("deck_name", "").strip()}
+
+
+def _validate_deck_import_form(form_state: dict[str, str]) -> dict[str, str]:
+    errors: dict[str, str] = {}
+    if not form_state["deck_name"]:
+        errors["deck_name"] = "Введите название колоды."
+    file = request.files.get("csv_file")
+    if file is None or file.filename == "":
+        errors["csv_file"] = "Выберите CSV-файл."
+    return errors
+
+
 def _new_deck_form_state(service: DeckPopulationService) -> dict[str, object]:
     requested_raw = request.form.get("requested_count", "").strip()
     default_count = service.get_default_target_count()
@@ -553,6 +644,20 @@ def _is_positive_int(raw_value: str) -> bool:
         return int(raw_value) >= 1
     except ValueError:
         return False
+
+
+def _deck_import_error_message(message: str) -> str:
+    if message == "Deck already exists.":
+        return "Колода с таким названием уже существует."
+    return "Не удалось подготовить создание колоды."
+
+
+def _deck_import_confirm_error_message(message: str) -> str:
+    if message == "Deck already exists.":
+        return "Колода с таким названием уже существует."
+    if message == "No accepted rows.":
+        return "В предпросмотре нет строк для создания колоды."
+    return "Не удалось создать колоду из CSV."
 
 
 def _new_deck_error_message(message: str) -> str:
