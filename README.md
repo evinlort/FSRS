@@ -158,6 +158,14 @@ Verified variant with an explicit port:
 .venv/bin/flask --app czech_vocab.web.app:create_app run --port 5122
 ```
 
+Helper scripts with the same default host and a configurable port:
+
+```bash
+./run.sh
+./run.sh --port 5122
+./run.fish -p 5122
+```
+
 Unverified `uv`-based equivalent:
 
 ```bash
