@@ -34,7 +34,8 @@ def test_home_page_shows_dashboard_sections_in_priority_order(client, app) -> No
     assert response.status_code == 200
     page = response.get_data(as_text=True)
     assert page.index("Начать повторение") < page.index("К повторению сегодня")
-    assert page.index("К повторению сегодня") < page.index("Колоды")
+    assert page.index("К повторению сегодня") < page.index("Памятка по запоминанию")
+    assert page.index("Памятка по запоминанию") < page.index("Колоды")
     assert page.index("Колоды") < page.index("Недавняя активность")
     assert page.index("Недавняя активность") < page.index("Импорт словаря")
     assert page.index("Импорт словаря") < page.index("Статистика по обучению")
@@ -44,7 +45,9 @@ def test_home_page_shows_dashboard_sections_in_priority_order(client, app) -> No
     assert "Основная" in page
     assert "Путешествия" in page
     assert "Всего карточек: 2" in page
-    assert "К повторению сегодня: 1" in page
+    assert "К повторению сегодня:" in page
+    assert "Открыть памятку" in page
+    assert page.count('href="/memory-tips"') >= 2
     assert "kniha" in page
     assert "Good" in page
 
@@ -57,6 +60,9 @@ def test_home_page_points_to_import_when_no_cards_exist(client) -> None:
     assert "Пока нет карточек" in page
     assert 'href="/import"' in page
     assert "Импортировать слова" in page
+    assert "Памятка по запоминанию" in page
+    assert "Открыть памятку" in page
+    assert page.count('href="/memory-tips"') >= 2
 
 
 def test_acceptance_flow_covers_import_review_and_catalog(client, app) -> None:

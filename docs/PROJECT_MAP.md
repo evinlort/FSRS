@@ -91,6 +91,7 @@
   - service: [`DashboardService`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/dashboard_service.py)
   - DB access: `cards`, `decks`, `review_logs`
   - inputs: none
+  - notes: includes a dedicated shortcut to the evidence-based memory tips guide at `/memory-tips`
 
 - `/favicon.ico`
   - methods: `GET`

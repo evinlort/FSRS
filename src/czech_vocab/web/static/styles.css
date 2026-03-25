@@ -145,6 +145,12 @@ button {
   color: #fff;
 }
 
+.site-nav__link--spotlight {
+  border-color: rgba(44, 107, 82, 0.3);
+  background: rgba(44, 107, 82, 0.12);
+  font-weight: 700;
+}
+
 .page-shell {
   padding: 1rem 0 3rem;
 }
@@ -212,6 +218,10 @@ button {
 
 .panel--accent {
   background: linear-gradient(135deg, rgba(44, 107, 82, 0.14), rgba(255, 253, 248, 0.92));
+}
+
+.panel--guide {
+  background: linear-gradient(135deg, rgba(167, 115, 34, 0.16), rgba(255, 253, 248, 0.94));
 }
 
 .action-row,

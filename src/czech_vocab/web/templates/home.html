@@ -43,6 +43,14 @@
     <p>К повторению сегодня: {{ dashboard.due_cards }}</p>
   </section>
 
+  <section class="panel panel--guide">
+    <h2 class="panel__title">Памятка по запоминанию</h2>
+    <p>Короткая evidence-based памятка по тому, как запоминать слова эффективнее и не подменять обучение иллюзией прогресса.</p>
+    <div class="action-row">
+      <a class="button button--primary" href="{{ url_for('main.memory_tips_page') }}">Открыть памятку</a>
+    </div>
+  </section>
+
   <section class="panel">
     <h2 class="panel__title">Колоды</h2>
     <div class="action-row">
