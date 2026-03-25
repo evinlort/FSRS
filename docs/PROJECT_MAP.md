@@ -97,6 +97,12 @@
   - handler: `favicon()`
   - behavior: redirects to static `favicon.svg`
 
+- `/memory-tips`
+  - methods: `GET`
+  - handler: `memory_tips_page()`
+  - behavior: serves the standalone evidence-based guide from [`docs/memory_tips_evidence.html`](/home/egrebnev/Dev/ai/FSRS/docs/memory_tips_evidence.html)
+  - DB access: none
+
 - `/import`
   - methods: `GET`
   - handler: `import_page()`

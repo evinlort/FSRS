@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from datetime import UTC, datetime
 
 from flask import (
@@ -7,6 +9,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_file,
     session,
     url_for,
 )
@@ -47,6 +50,11 @@ def home() -> str:
 @main_bp.get("/favicon.ico")
 def favicon():
     return redirect(url_for("static", filename="favicon.svg"))
+
+
+@main_bp.get("/memory-tips")
+def memory_tips_page():
+    return send_file(_memory_tips_path(), mimetype="text/html")
 
 
 @main_bp.get("/import")
@@ -767,6 +775,10 @@ def _preview_error_context(error_message: str) -> tuple[str, str]:
         "Импорт не выполнен.",
         "Файл не удалось обработать. Проверьте кодировку и попробуйте снова.",
     )
+
+
+def _memory_tips_path() -> Path:
+    return Path(current_app.root_path).parents[2] / "docs" / "memory_tips_evidence.html"
 
 
 def _redirect_to_review(deck_id: str | None):

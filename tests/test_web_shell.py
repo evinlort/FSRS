@@ -21,6 +21,7 @@ def test_home_page_renders_russian_shell_navigation(client) -> None:
     assert 'href="/cards"' in page
     assert 'href="/stats"' in page
     assert 'href="/settings"' in page
+    assert 'href="/memory-tips"' in page
     assert "Повторение" in page
 
 
@@ -49,6 +50,16 @@ def test_stats_and_settings_pages_render_in_shell(client) -> None:
     assert settings_page.status_code == 200
     assert "<title>Статистика" in stats_page.get_data(as_text=True)
     assert "<title>Настройки" in settings_page.get_data(as_text=True)
+
+
+def test_memory_tips_page_serves_evidence_based_guide_html(client) -> None:
+    response = client.get("/memory-tips")
+
+    assert response.status_code == 200
+    assert response.mimetype == "text/html"
+    page = response.get_data(as_text=True)
+    assert "<title>Советы для запоминания: только доказательные</title>" in page
+    assert "Retrieval practice" in page
 
 
 def test_create_app_accepts_testing_overrides(tmp_path: Path) -> None:
