@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Советы для запоминания: только доказательные</title>
+  <style>
+    :root {
+      --bg: #f4efe7;
+      --paper: #fffaf2;
+      --ink: #1f2933;
+      --muted: #5b6b79;
+      --line: #d7c8b4;
+      --accent: #9b4d2d;
+      --accent-soft: #efe0d3;
+      --strong-bg: #d8efe0;
+      --strong-fg: #165b31;
+      --moderate-bg: #f5e9c9;
+      --moderate-fg: #7a5b00;
+      --conditional-bg: #ece2f8;
+      --conditional-fg: #5c2d91;
+      --shadow: 0 18px 50px rgba(56, 41, 25, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top right, rgba(155, 77, 45, 0.14), transparent 22rem),
+        linear-gradient(180deg, #f8f1e7 0%, var(--bg) 100%);
+      font-family: "Avenir Next", "Trebuchet MS", sans-serif;
+      line-height: 1.55;
+    }
+
+    main {
+      width: min(1120px, calc(100vw - 2rem));
+      margin: 0 auto;
+      padding: 3rem 0 4rem;
+    }
+
+    .hero,
+    .notes,
+    .sources {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .eyebrow {
+      margin: 0 0 0.75rem;
+      color: var(--accent);
+      font-size: 0.84rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2 {
+      font-family: "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      line-height: 1.15;
+      margin: 0;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 3vw, 3.2rem);
+      margin-bottom: 0.8rem;
+    }
+
+    .lead {
+      max-width: 72ch;
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      margin-top: 1.25rem;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.35rem 0.7rem;
+      border-radius: 999px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .badge--strong {
+      background: var(--strong-bg);
+      color: var(--strong-fg);
+    }
+
+    .badge--moderate {
+      background: var(--moderate-bg);
+      color: var(--moderate-fg);
+    }
+
+    .badge--conditional {
+      background: var(--conditional-bg);
+      color: var(--conditional-fg);
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      margin-bottom: 1.5rem;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 960px;
+    }
+
+    thead th {
+      position: sticky;
+      top: 0;
+      background: rgba(255, 250, 242, 0.96);
+      backdrop-filter: blur(10px);
+      font-size: 0.85rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    th,
+    td {
+      padding: 1rem;
+      vertical-align: top;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: 0;
+    }
+
+    tbody tr:nth-child(odd) {
+      background: rgba(255, 255, 255, 0.45);
+    }
+
+    .tip-title {
+      display: block;
+      margin-bottom: 0.3rem;
+      font-weight: 800;
+    }
+
+    .tip-note {
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .notes,
+    .sources {
+      padding: 1.5rem 1.6rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .notes ul,
+    .sources ol {
+      margin: 0.85rem 0 0;
+      padding-left: 1.25rem;
+    }
+
+    .notes li,
+    .sources li {
+      margin: 0.45rem 0;
+    }
+
+    .sources a {
+      color: var(--accent);
+    }
+
+    @media (max-width: 720px) {
+      main {
+        width: min(100vw - 1rem, 100%);
+        padding-top: 1rem;
+      }
+
+      .hero,
+      .notes,
+      .sources {
+        border-radius: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Доказательная памятка</p>
+      <h1>Советы для запоминания</h1>
+      <p class="lead">
+        Ниже только те рекомендации, для которых есть обзоры, мета-анализы или признанные
+        обзорные статьи. Я сознательно не включал популярные, но слабо подтвержденные советы.
+        Отдельно помечена сила доказательств: где база сильная, где умеренная, а где прием полезен
+        только в узких условиях.
+      </p>
+      <div class="legend" aria-label="Шкала силы доказательств">
+        <span class="badge badge--strong">Strong: обзоры и мета-анализы хорошо поддерживают прием</span>
+        <span class="badge badge--moderate">Moderate: прием полезен, но эффект зависит от условий</span>
+        <span class="badge badge--conditional">Conditional: использовать точечно, а не как основу</span>
+      </div>
+    </section>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>№</th>
+            <th>Совет</th>
+            <th>Как делать</th>
+            <th>Почему это работает</th>
+            <th>Сила доказательств</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>
+              <span class="tip-title">Доставай ответ из памяти до проверки</span>
+              <span class="tip-note">Retrieval practice / practice testing</span>
+            </td>
+            <td>Сначала честно попытайся вспомнить перевод, и только потом смотри ответ.</td>
+            <td>Попытка извлечения сама по себе усиливает долговременное запоминание лучше, чем повторное чтение.</td>
+            <td><span class="badge badge--strong">Strong</span></td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>
+              <span class="tip-title">Разноси повторения во времени</span>
+              <span class="tip-note">Spacing / distributed practice</span>
+            </td>
+            <td>Учись короткими сессиями в разные дни вместо одной длинной зубрежки.</td>
+            <td>Распределенная практика стабильно улучшает удержание материала по сравнению с massed practice.</td>
+            <td><span class="badge badge--strong">Strong</span></td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>
+              <span class="tip-title">Предпочитай короткие серии, а не марафон</span>
+              <span class="tip-note">Практическое следствие spacing effect</span>
+            </td>
+            <td>Лучше 10–20 минут регулярно, чем 90 минут разом перед сном или перед дедлайном.</td>
+            <td>Эффект тот же: при распределении во времени следы памяти устойчивее и меньше иллюзия знания.</td>
+            <td><span class="badge badge--strong">Strong</span></td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>
+              <span class="tip-title">Перемешивай похожие слова и формы</span>
+              <span class="tip-note">Interleaving</span>
+            </td>
+            <td>Ставь рядом похожие элементы: похожие глаголы, падежные формы, близкие по смыслу пары.</td>
+            <td>Перемешивание помогает лучше различать похожие категории и уменьшает ложное чувство “я это знаю”.</td>
+            <td><span class="badge badge--moderate">Moderate</span></td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td>
+              <span class="tip-title">Не избегай умеренной трудности</span>
+              <span class="tip-note">Desirable difficulties</span>
+            </td>
+            <td>Не оставляй в работе только легкие карточки. Небольшая сложность полезна, если материал все еще посилен.</td>
+            <td>Некоторая трудность во время обучения может ухудшать ощущение легкости, но улучшать удержание и перенос.</td>
+            <td><span class="badge badge--moderate">Moderate</span></td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td>
+              <span class="tip-title">Береги сон после обучения</span>
+              <span class="tip-note">Sleep-dependent consolidation</span>
+            </td>
+            <td>Не планируй интенсивное запоминание на периоды хронического недосыпа. После тяжелой сессии лучше нормально поспать.</td>
+            <td>Сон поддерживает консолидацию памяти; систематический недосып ухудшает закрепление и последующее извлечение.</td>
+            <td><span class="badge badge--strong">Strong</span></td>
+          </tr>
+          <tr>
+            <td>7</td>
+            <td>
+              <span class="tip-title">Не делай перечитывание главным методом</span>
+              <span class="tip-note">Rereading / highlighting are weak by themselves</span>
+            </td>
+            <td>Если читаешь заметки, делай это как подготовку к активному вспоминанию, а не как замену вспоминанию.</td>
+            <td>Повторное чтение и подчеркивание часто создают ощущение беглости, но обычно уступают практике извлечения и spacing.</td>
+            <td><span class="badge badge--strong">Strong</span></td>
+          </tr>
+          <tr>
+            <td>8</td>
+            <td>
+              <span class="tip-title">Мнемоники и яркие образы используй точечно</span>
+              <span class="tip-note">Keyword mnemonic</span>
+            </td>
+            <td>Применяй для особенно упрямых, конкретных слов, где можно придумать яркую ассоциацию.</td>
+            <td>Прием может помогать для части слов и на коротких интервалах, но как универсальная основа обучения слабее retrieval practice и spacing.</td>
+            <td><span class="badge badge--conditional">Conditional</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <section class="notes">
+      <h2>Как использовать это в карточках</h2>
+      <ul>
+        <li>Главная база: попытка вспомнить + проверка + повторение с интервалами.</li>
+        <li>Если прием не помогает удержанию через дни, а делает только “приятнее учиться”, его не стоит делать основой системы.</li>
+        <li>Честная самооценка важнее ощущения легкости: полезный метод часто ощущается труднее, чем бесполезный.</li>
+      </ul>
+    </section>
+
+    <section class="sources">
+      <h2>Ключевые источники</h2>
+      <ol>
+        <li>
+          Dunlosky J, Rawson KA, Marsh EJ, Nathan MJ, Willingham DT. <em>Improving Students’ Learning With Effective Learning Techniques</em> (2013).
+          DOI: <a href="https://doi.org/10.1177/1529100612453266">10.1177/1529100612453266</a>
+        </li>
+        <li>
+          Rowland CA. <em>The effect of testing versus restudy on retention: A meta-analytic review of the testing effect</em> (2014).
+          DOI: <a href="https://doi.org/10.1037/a0037559">10.1037/a0037559</a>
+        </li>
+        <li>
+          Cepeda NJ, Pashler H, Vul E, Wixted JT, Rohrer D. <em>Distributed practice in verbal recall tasks: A review and quantitative synthesis</em> (2006).
+          DOI: <a href="https://doi.org/10.1037/0033-2909.132.3.354">10.1037/0033-2909.132.3.354</a>
+        </li>
+        <li>
+          Rohrer D. <em>Interleaving Helps Students Distinguish among Similar Concepts</em> (2012).
+          DOI: <a href="https://doi.org/10.1007/s10648-012-9201-3">10.1007/s10648-012-9201-3</a>
+        </li>
+        <li>
+          Brunmair M, Richter T. <em>Similarity matters: A meta-analysis of interleaved learning and its moderators</em> (2019).
+          DOI: <a href="https://doi.org/10.1037/bul0000209">10.1037/bul0000209</a>
+        </li>
+        <li>
+          Bjork RA, Kroll JF. <em>Desirable Difficulties in Vocabulary Learning</em> (2015).
+          DOI: <a href="https://doi.org/10.5406/amerjpsyc.128.2.0241">10.5406/amerjpsyc.128.2.0241</a>
+        </li>
+        <li>
+          Rasch B, Born J. <em>About Sleep's Role in Memory</em> (2013).
+          DOI: <a href="https://doi.org/10.1152/physrev.00032.2012">10.1152/physrev.00032.2012</a>
+        </li>
+      </ol>
+    </section>
+  </main>
+</body>
+</html>

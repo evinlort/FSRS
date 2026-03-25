@@ -52,6 +52,8 @@
   - pytest coverage for repositories, services, route behavior, and main UI flows.
 - [`docs/FSRS_SCOPE.md`](/home/egrebnev/Dev/ai/FSRS/docs/FSRS_SCOPE.md)
   - MVP scope contract.
+- [`docs/memory_tips_evidence.html`](/home/egrebnev/Dev/ai/FSRS/docs/memory_tips_evidence.html)
+  - standalone evidence-based memorization guide with cited learning-science references.
 - [`README.md`](/home/egrebnev/Dev/ai/FSRS/README.md)
   - developer-facing setup and usage docs.
 - [`pyproject.toml`](/home/egrebnev/Dev/ai/FSRS/pyproject.toml)
