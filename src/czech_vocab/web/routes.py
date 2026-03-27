@@ -14,6 +14,7 @@ from flask import (
 )
 
 from czech_vocab.repositories.records import (
+    DEFAULT_REVIEW_DIRECTION,
     UndoReviewSnapshot,
     parse_datetime,
     serialize_datetime,
@@ -35,15 +36,29 @@ from czech_vocab.services import (
     StatsService,
     StudyService,
 )
+from czech_vocab.services.review_direction import (
+    parse_review_direction,
+    review_answer_label,
+    review_answer_text,
+    review_direction_label,
+    review_direction_options,
+    review_prompt_text,
+)
 
 main_bp = Blueprint("main", __name__)
 
 
 @main_bp.get("/")
 def home() -> str:
+    selected_review_direction = parse_review_direction(request.args.get("direction"))
     service = DashboardService(current_app.config["DATABASE_PATH"])
     dashboard = service.get_dashboard_data(now=datetime.now(UTC))
-    return render_template("home.html", dashboard=dashboard)
+    return render_template(
+        "home.html",
+        dashboard=dashboard,
+        review_direction_options=review_direction_options(),
+        selected_review_direction=selected_review_direction,
+    )
 
 
 @main_bp.get("/favicon.ico")
@@ -310,14 +325,37 @@ def review_page() -> str:
     requested_deck_id = None
     if request.args.get("deck"):
         requested_deck_id = _parse_page(request.args.get("deck", ""))
+    direction = parse_review_direction(request.args.get("direction"))
     selected_deck = _resolve_deck(deck_service, requested_deck_id)
-    queue_state = service.get_queue_state(now=datetime.now(UTC), deck_id=selected_deck.id)
+    queue_state = service.get_queue_state(
+        now=datetime.now(UTC),
+        deck_id=selected_deck.id,
+        direction=direction,
+    )
+    review_prompt = None
+    review_answer = None
+    if queue_state.card is not None:
+        review_prompt = review_prompt_text(
+            lemma=queue_state.card.lemma,
+            translation=queue_state.card.translation,
+            direction=direction,
+        )
+        review_answer = review_answer_text(
+            lemma=queue_state.card.lemma,
+            translation=queue_state.card.translation,
+            direction=direction,
+        )
     return render_template(
         "review.html",
         review_card=queue_state.card,
+        review_prompt=review_prompt,
+        review_answer=review_answer,
+        review_answer_label=review_answer_label(direction),
+        review_direction=direction,
+        review_direction_label=review_direction_label(direction),
         review_empty_reason=queue_state.empty_reason,
         review_deck=selected_deck,
-        undo_available=_session_undo_snapshot(selected_deck.id) is not None,
+        undo_available=_session_undo_snapshot(selected_deck.id, direction) is not None,
     )
 
 
@@ -326,11 +364,13 @@ def submit_review(card_id: int):
     service = StudyService(current_app.config["DATABASE_PATH"])
     rating = request.form.get("rating", "")
     deck_id = request.form.get("deck", "")
+    direction = parse_review_direction(request.form.get("direction"))
     try:
         result = service.submit_review(
             card_id=card_id,
             rating=rating,
             review_at=datetime.now(UTC),
+            direction=direction,
         )
     except ValueError as exc:
         return str(exc), 400
@@ -338,27 +378,26 @@ def submit_review(card_id: int):
         return str(exc), 404
     session["review_undo"] = _serialize_undo_snapshot(result.undo_snapshot)
     flash("Последний ответ сохранён.", "success")
-    if deck_id:
-        return redirect(url_for("main.review_page", deck=deck_id))
-    return redirect(url_for("main.review_page"))
+    return _redirect_to_review(deck_id or None, direction)
 
 
 @main_bp.post("/review/undo")
 def undo_review():
     service = StudyService(current_app.config["DATABASE_PATH"])
     deck_id = request.form.get("deck", "")
-    snapshot = _session_undo_snapshot(_parse_page(deck_id) if deck_id else None)
+    direction = parse_review_direction(request.form.get("direction"))
+    snapshot = _session_undo_snapshot(_parse_page(deck_id) if deck_id else None, direction)
     session.pop("review_undo", None)
     if snapshot is None:
         flash("Последний ответ уже нельзя отменить.", "warning")
-        return _redirect_to_review(deck_id)
+        return _redirect_to_review(deck_id or None, direction)
     try:
         service.undo_review(snapshot=snapshot, undone_at=datetime.now(UTC))
     except (LookupError, ValueError):
         flash("Последний ответ уже нельзя отменить.", "warning")
-        return _redirect_to_review(deck_id or str(snapshot.deck_id))
+        return _redirect_to_review(deck_id or str(snapshot.deck_id), snapshot.direction)
     flash("Последний ответ отменён.", "success")
-    return _redirect_to_review(str(snapshot.deck_id))
+    return _redirect_to_review(str(snapshot.deck_id), snapshot.direction)
 
 
 @main_bp.get("/cards")
@@ -780,10 +819,17 @@ def _memory_tips_path() -> Path:
     return Path(current_app.root_path).parents[2] / "docs" / "memory_tips_evidence.html"
 
 
-def _redirect_to_review(deck_id: str | None):
+def _redirect_to_review(
+    deck_id: str | None,
+    direction: str = DEFAULT_REVIEW_DIRECTION,
+):
+    params: dict[str, str] = {}
     if deck_id:
-        return redirect(url_for("main.review_page", deck=deck_id))
-    return redirect(url_for("main.review_page"))
+        params["deck"] = deck_id
+    normalized_direction = parse_review_direction(direction)
+    if normalized_direction != DEFAULT_REVIEW_DIRECTION:
+        params["direction"] = normalized_direction
+    return redirect(url_for("main.review_page", **params))
 
 
 def _edit_form_from_request(card_id: int) -> CardEditForm:
@@ -809,6 +855,7 @@ def _serialize_undo_snapshot(snapshot: UndoReviewSnapshot) -> dict[str, object]:
     return {
         "card_id": snapshot.card_id,
         "deck_id": snapshot.deck_id,
+        "direction": snapshot.direction,
         "review_log_id": snapshot.review_log_id,
         "fsrs_state": snapshot.fsrs_state,
         "due_at": serialize_datetime(snapshot.due_at),
@@ -816,15 +863,21 @@ def _serialize_undo_snapshot(snapshot: UndoReviewSnapshot) -> dict[str, object]:
     }
 
 
-def _session_undo_snapshot(deck_id: int | None) -> UndoReviewSnapshot | None:
+def _session_undo_snapshot(
+    deck_id: int | None,
+    direction: str = DEFAULT_REVIEW_DIRECTION,
+) -> UndoReviewSnapshot | None:
     payload = session.get("review_undo")
     if not isinstance(payload, dict):
         return None
     if deck_id is not None and payload.get("deck_id") != deck_id:
         return None
+    if payload.get("direction", DEFAULT_REVIEW_DIRECTION) != parse_review_direction(direction):
+        return None
     return UndoReviewSnapshot(
         card_id=payload["card_id"],
         deck_id=payload["deck_id"],
+        direction=payload.get("direction", DEFAULT_REVIEW_DIRECTION),
         review_log_id=payload["review_log_id"],
         fsrs_state=payload["fsrs_state"],
         due_at=parse_datetime(payload["due_at"]),

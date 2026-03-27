@@ -4,7 +4,13 @@ from pathlib import Path
 import pytest
 
 from czech_vocab.domain import FsrsScheduler
-from czech_vocab.repositories import CardCreate, build_identity_key, initialize_database
+from czech_vocab.repositories import (
+    FORWARD_REVIEW_DIRECTION,
+    REVERSE_REVIEW_DIRECTION,
+    CardCreate,
+    build_identity_key,
+    initialize_database,
+)
 from czech_vocab.services import DeckSettingsService
 from czech_vocab.services.study_service import StudyService
 
@@ -130,6 +136,19 @@ def test_queue_reports_new_limit_reached_when_new_cards_remain(tmp_path: Path) -
     assert queue.empty_reason == "new_limit_reached"
 
 
+def test_reverse_direction_queue_is_independent_from_forward_progress(tmp_path: Path) -> None:
+    service = build_service(tmp_path / "study.sqlite3")
+    now = datetime(2026, 3, 14, 12, 0, tzinfo=UTC)
+    create_card(service, "kniha", "книга", due_at=now - timedelta(hours=1), learned=True)
+
+    queue = service.get_queue_state(now=now, direction=REVERSE_REVIEW_DIRECTION)
+
+    assert queue.card is not None
+    assert queue.card.translation == "книга"
+    assert queue.card.lemma == "kniha"
+    assert queue.empty_reason is None
+
+
 def test_submit_review_updates_schedule_and_adds_one_review_log(tmp_path: Path) -> None:
     service = build_service(tmp_path / "study.sqlite3")
     review_at = datetime(2026, 3, 14, 12, 0, tzinfo=UTC)
@@ -154,6 +173,43 @@ def test_submit_review_updates_schedule_and_adds_one_review_log(tmp_path: Path) 
     assert len(logs) == 1
     assert logs[0].rating == "Good"
     assert logs[0].review_duration_seconds == 13
+
+
+def test_reverse_review_updates_only_reverse_direction_state(tmp_path: Path) -> None:
+    service = build_service(tmp_path / "study.sqlite3")
+    review_at = datetime(2026, 3, 14, 12, 0, tzinfo=UTC)
+    created = create_card(service, "pes", "собака", due_at=review_at, learned=False)
+    forward_before = service._repository.get_review_state(
+        created.id,
+        direction=FORWARD_REVIEW_DIRECTION,
+    )
+
+    result = service.submit_review(
+        card_id=created.id,
+        rating="Good",
+        review_at=review_at,
+        direction=REVERSE_REVIEW_DIRECTION,
+    )
+
+    forward_after = service._repository.get_review_state(
+        created.id,
+        direction=FORWARD_REVIEW_DIRECTION,
+    )
+    reverse_after = service._repository.get_review_state(
+        created.id,
+        direction=REVERSE_REVIEW_DIRECTION,
+    )
+    reverse_logs = service._repository.list_review_logs(
+        created.id,
+        direction=REVERSE_REVIEW_DIRECTION,
+    )
+
+    assert result.undo_snapshot.direction == REVERSE_REVIEW_DIRECTION
+    assert forward_before == forward_after
+    assert reverse_after is not None
+    assert reverse_after.last_review_at == review_at
+    assert len(reverse_logs) == 1
+    assert reverse_logs[0].direction == REVERSE_REVIEW_DIRECTION
 
 
 def test_undo_review_restores_previous_schedule_and_marks_log_undone(tmp_path: Path) -> None:
@@ -181,6 +237,45 @@ def test_undo_review_restores_previous_schedule_and_marks_log_undone(tmp_path: P
     queue = service.get_queue_state(now=review_at + timedelta(minutes=2))
     assert queue.card is not None
     assert queue.card.card_id == created.id
+
+
+def test_reverse_undo_does_not_touch_forward_direction(tmp_path: Path) -> None:
+    service = build_service(tmp_path / "study.sqlite3")
+    review_at = datetime(2026, 3, 14, 12, 0, tzinfo=UTC)
+    created = create_card(service, "hrad", "замок", due_at=review_at, learned=False)
+    forward_before = service._repository.get_review_state(
+        created.id,
+        direction=FORWARD_REVIEW_DIRECTION,
+    )
+    result = service.submit_review(
+        card_id=created.id,
+        rating="Good",
+        review_at=review_at,
+        direction=REVERSE_REVIEW_DIRECTION,
+    )
+
+    service.undo_review(snapshot=result.undo_snapshot, undone_at=review_at + timedelta(minutes=1))
+
+    forward_after = service._repository.get_review_state(
+        created.id,
+        direction=FORWARD_REVIEW_DIRECTION,
+    )
+    reverse_after = service._repository.get_review_state(
+        created.id,
+        direction=REVERSE_REVIEW_DIRECTION,
+    )
+    reverse_logs = service._repository.list_review_logs(
+        created.id,
+        direction=REVERSE_REVIEW_DIRECTION,
+    )
+
+    assert forward_before == forward_after
+    assert reverse_after is not None
+    assert reverse_after.fsrs_state == result.undo_snapshot.fsrs_state
+    assert reverse_after.due_at == result.undo_snapshot.due_at
+    assert reverse_after.last_review_at == result.undo_snapshot.last_review_at
+    assert len(reverse_logs) == 1
+    assert reverse_logs[0].undone_at == review_at + timedelta(minutes=1)
 
 
 def test_undo_review_rejects_second_attempt(tmp_path: Path) -> None:

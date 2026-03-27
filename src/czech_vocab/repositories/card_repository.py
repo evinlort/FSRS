@@ -360,20 +360,37 @@ class CardRepository:
         self,
         *,
         deck_id: int,
+        direction: str = DEFAULT_REVIEW_DIRECTION,
         day_start: datetime,
         day_end: datetime,
     ) -> int:
         return self._deck_card_repository.count_new_cards_reviewed_on_day(
             deck_id=deck_id,
+            direction=direction,
             day_start=day_start,
             day_end=day_end,
         )
 
-    def query_due_learned_cards(self, *, deck_id: int, now: datetime) -> list[CardRecord]:
-        return self._deck_card_repository.query_due_learned_cards(deck_id=deck_id, now=now)
+    def query_due_learned_cards(
+        self,
+        *,
+        deck_id: int,
+        now: datetime,
+        direction: str = DEFAULT_REVIEW_DIRECTION,
+    ) -> list[CardRecord]:
+        return self._deck_card_repository.query_due_learned_cards(
+            deck_id=deck_id,
+            now=now,
+            direction=direction,
+        )
 
-    def query_new_cards(self, *, deck_id: int) -> list[CardRecord]:
-        return self._deck_card_repository.query_new_cards(deck_id=deck_id)
+    def query_new_cards(
+        self,
+        *,
+        deck_id: int,
+        direction: str = DEFAULT_REVIEW_DIRECTION,
+    ) -> list[CardRecord]:
+        return self._deck_card_repository.query_new_cards(deck_id=deck_id, direction=direction)
 
     def query_due_cards(self, now: datetime) -> list[CardRecord]:
         with self._connect() as connection:

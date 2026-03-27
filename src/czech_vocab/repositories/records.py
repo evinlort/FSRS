@@ -113,6 +113,7 @@ class DeckPopulationDraftRecord:
 class UndoReviewSnapshot:
     card_id: int
     deck_id: int
+    direction: str
     review_log_id: int
     fsrs_state: dict[str, Any]
     due_at: datetime | None

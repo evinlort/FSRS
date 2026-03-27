@@ -41,6 +41,9 @@ def test_home_page_shows_dashboard_sections_in_priority_order(client, app) -> No
     assert page.index("Импорт словаря") < page.index("Статистика по обучению")
     assert 'action="/review"' in page
     assert 'name="deck"' in page
+    assert 'name="direction"' in page
+    assert 'option value="cz_to_ru" selected' in page
+    assert 'option value="ru_to_cz"' in page
     assert 'option value="1" selected' in page
     assert "Основная" in page
     assert "Путешествия" in page

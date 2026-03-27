@@ -32,6 +32,14 @@
             {% endif %}
           {% endfor %}
         </select>
+        <label class="field-label" for="direction">Направление</label>
+        <select id="direction" name="direction">
+          {% for option in review_direction_options %}
+            <option value="{{ option.value }}"{% if option.value == selected_review_direction %} selected{% endif %}>
+              {{ option.label }}
+            </option>
+          {% endfor %}
+        </select>
         <button class="button button--primary" type="submit">Начать повторение</button>
       </form>
     </section>

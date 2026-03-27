@@ -5,7 +5,7 @@ from random import sample
 from typing import Callable
 
 from czech_vocab.domain import FsrsScheduler
-from czech_vocab.repositories import CardRecord, CardRepository
+from czech_vocab.repositories import DEFAULT_REVIEW_DIRECTION, CardRecord, CardRepository
 from czech_vocab.repositories.records import UndoReviewSnapshot
 from czech_vocab.services.deck_settings_service import DeckSettingsService
 
@@ -48,22 +48,38 @@ class StudyService:
         self._scheduler = scheduler or FsrsScheduler()
         self._shuffler = shuffler or _shuffle_cards
 
-    def get_next_due_card(self, *, now: datetime, deck_id: int | None = None) -> StudyCard | None:
-        return self.get_queue_state(now=now, deck_id=deck_id).card
+    def get_next_due_card(
+        self,
+        *,
+        now: datetime,
+        deck_id: int | None = None,
+        direction: str = DEFAULT_REVIEW_DIRECTION,
+    ) -> StudyCard | None:
+        return self.get_queue_state(now=now, deck_id=deck_id, direction=direction).card
 
-    def get_queue_state(self, *, now: datetime, deck_id: int | None = None) -> QueueState:
+    def get_queue_state(
+        self,
+        *,
+        now: datetime,
+        deck_id: int | None = None,
+        direction: str = DEFAULT_REVIEW_DIRECTION,
+    ) -> QueueState:
         active_deck_id = deck_id or self._deck_settings_service.get_default_deck().id
         if self._repository.count_cards_in_deck(active_deck_id) == 0:
             return QueueState(card=None, empty_reason="no_cards")
         due_cards = self._shuffler(
-            self._repository.query_due_learned_cards(deck_id=active_deck_id, now=now)
+            self._repository.query_due_learned_cards(
+                deck_id=active_deck_id,
+                now=now,
+                direction=direction,
+            )
         )
         if due_cards:
             return QueueState(card=_to_study_card(due_cards[0]), empty_reason=None)
-        new_cards = self._repository.query_new_cards(deck_id=active_deck_id)
+        new_cards = self._repository.query_new_cards(deck_id=active_deck_id, direction=direction)
         if not new_cards:
             return QueueState(card=None, empty_reason="no_due_cards")
-        if self._new_limit_reached(deck_id=active_deck_id, now=now):
+        if self._new_limit_reached(deck_id=active_deck_id, now=now, direction=direction):
             return QueueState(card=None, empty_reason="new_limit_reached")
         new_cards = self._shuffler(new_cards)
         return QueueState(card=_to_study_card(new_cards[0]), empty_reason=None)
@@ -74,28 +90,42 @@ class StudyService:
         card_id: int,
         rating: str,
         review_at: datetime,
+        direction: str = DEFAULT_REVIEW_DIRECTION,
         review_duration_seconds: int | None = None,
     ) -> ReviewResult:
         with self._repository.connect() as connection:
             card = self._repository.get_card_by_id(card_id, connection=connection)
             if card is None:
                 raise LookupError(f"Card not found: {card_id}")
+            review_state = self._repository.get_review_state(
+                card_id,
+                direction=direction,
+                connection=connection,
+            )
+            previous_card_state = (
+                review_state.fsrs_state
+                if review_state is not None
+                else self._scheduler.create_default_state(card_id=card.id, now=review_at)
+            )
+            previous_card = self._scheduler.deserialize_card(previous_card_state)
             previous_state = UndoReviewSnapshot(
                 card_id=card.id,
                 deck_id=card.deck_id,
+                direction=direction,
                 review_log_id=0,
-                fsrs_state=card.fsrs_state,
-                due_at=card.due_at,
-                last_review_at=card.last_review_at,
+                fsrs_state=previous_card_state,
+                due_at=previous_card.due,
+                last_review_at=previous_card.last_review,
             )
             outcome = self._scheduler.apply_rating(
-                card_state=card.fsrs_state,
+                card_state=previous_card_state,
                 rating=rating,
                 review_at=review_at,
                 review_duration_seconds=review_duration_seconds,
             )
             self._repository.update_schedule_state(
                 card_id=card_id,
+                direction=direction,
                 fsrs_state=outcome.card_state,
                 due_at=outcome.due_at,
                 last_review_at=outcome.last_review_at,
@@ -103,6 +133,7 @@ class StudyService:
             )
             review_log = self._repository.insert_review_log(
                 card_id=card_id,
+                direction=direction,
                 rating=outcome.review_log.rating,
                 reviewed_at=outcome.review_log.reviewed_at,
                 review_duration_seconds=outcome.review_log.review_duration_seconds,
@@ -116,6 +147,7 @@ class StudyService:
             undo_snapshot=UndoReviewSnapshot(
                 card_id=previous_state.card_id,
                 deck_id=previous_state.deck_id,
+                direction=previous_state.direction,
                 review_log_id=review_log.id,
                 fsrs_state=previous_state.fsrs_state,
                 due_at=previous_state.due_at,
@@ -130,12 +162,14 @@ class StudyService:
                 raise LookupError(f"Card not found: {snapshot.card_id}")
             latest_log = self._repository.get_latest_active_review_log(
                 card_id=snapshot.card_id,
+                direction=snapshot.direction,
                 connection=connection,
             )
             if latest_log is None or latest_log.id != snapshot.review_log_id:
                 raise ValueError("Undo is no longer available")
             self._repository.update_schedule_state(
                 card_id=snapshot.card_id,
+                direction=snapshot.direction,
                 fsrs_state=snapshot.fsrs_state,
                 due_at=snapshot.due_at,
                 last_review_at=snapshot.last_review_at,
@@ -147,7 +181,13 @@ class StudyService:
                 connection=connection,
             )
 
-    def _new_limit_reached(self, *, deck_id: int, now: datetime) -> bool:
+    def _new_limit_reached(
+        self,
+        *,
+        deck_id: int,
+        now: datetime,
+        direction: str = DEFAULT_REVIEW_DIRECTION,
+    ) -> bool:
         deck = self._deck_settings_service.get_default_deck()
         if deck_id != deck.id:
             selected = next(
@@ -158,6 +198,7 @@ class StudyService:
         day_end = day_start + timedelta(days=1)
         reviewed_new_cards = self._repository.count_new_cards_reviewed_on_day(
             deck_id=deck_id,
+            direction=direction,
             day_start=day_start,
             day_end=day_end,
         )

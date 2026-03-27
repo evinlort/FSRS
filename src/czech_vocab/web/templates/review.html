@@ -5,6 +5,7 @@
 {% block page_title %}Повторение{% endblock %}
 {% block page_intro %}
   <p>Колода: {{ review_deck.name }}</p>
+  <p>Направление: {{ review_direction_label }}</p>
 {% endblock %}
 
 {% block content %}
@@ -17,6 +18,7 @@
         data-busy-form
       >
         <input type="hidden" name="deck" value="{{ review_deck.id }}">
+        <input type="hidden" name="direction" value="{{ review_direction }}">
         <button class="button" type="submit" data-busy-label="Отменяем...">
           Отменить последний ответ
         </button>
@@ -25,12 +27,13 @@
     {% if review_card %}
       <article class="study-card">
         <p class="review-context">Колода: {{ review_deck.name }}</p>
-        <h2 class="study-card__title">{{ review_card.lemma }}</h2>
+        <p class="review-context">Направление: {{ review_direction_label }}</p>
+        <h2 class="study-card__title">{{ review_prompt }}</h2>
         <button class="button button--primary" type="button" data-review-reveal-btn>
           Показать ответ
         </button>
         <section class="review-answer" data-review-answer hidden>
-          <p><strong>Перевод:</strong> {{ review_card.translation }}</p>
+          <p><strong>{{ review_answer_label }}:</strong> {{ review_answer }}</p>
         </section>
         <details class="review-details" data-review-details hidden>
           <summary>Подробнее</summary>
@@ -55,6 +58,7 @@
           data-busy-form
         >
           <input type="hidden" name="deck" value="{{ review_deck.id }}">
+          <input type="hidden" name="direction" value="{{ review_direction }}">
           <button
             class="button"
             type="submit"

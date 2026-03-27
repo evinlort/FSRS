@@ -1,7 +1,12 @@
 from datetime import UTC, datetime
 
 from czech_vocab.domain import FsrsScheduler
-from czech_vocab.repositories import CardCreate, CardRepository, build_identity_key
+from czech_vocab.repositories import (
+    REVERSE_REVIEW_DIRECTION,
+    CardCreate,
+    CardRepository,
+    build_identity_key,
+)
 from czech_vocab.services import DeckSettingsService
 
 
@@ -92,6 +97,27 @@ def test_review_page_uses_selected_deck_context(client, app) -> None:
     assert f'value="{second_deck.id}"' in page
 
 
+def test_review_page_can_render_reverse_direction_prompt(client, app) -> None:
+    due_at = datetime(2026, 3, 14, 12, 0, tzinfo=UTC)
+    create_due_card(
+        app.config["DATABASE_PATH"],
+        lemma="kniha",
+        translation="книга",
+        notes="common noun",
+        metadata={"level": "A1"},
+        due_at=due_at,
+    )
+
+    response = client.get("/review?deck=1&direction=ru_to_cz")
+
+    assert response.status_code == 200
+    page = response.get_data(as_text=True)
+    assert "Направление: Русский → Чешский" in page
+    assert "книга" in page
+    assert "<strong>Чешское слово:</strong> kniha" in page
+    assert 'name="direction" value="ru_to_cz"' in page
+
+
 def test_posting_valid_grade_redirects_and_persists_review(client, app) -> None:
     due_at = datetime(2026, 3, 14, 12, 0, tzinfo=UTC)
     created = create_due_card(
@@ -116,6 +142,36 @@ def test_posting_valid_grade_redirects_and_persists_review(client, app) -> None:
     logs = repository.list_review_logs(created.id)
     assert len(logs) == 1
     assert logs[0].rating == "Good"
+
+
+def test_posting_reverse_grade_preserves_direction_and_log_scope(client, app) -> None:
+    due_at = datetime(2026, 3, 14, 12, 0, tzinfo=UTC)
+    created = create_due_card(
+        app.config["DATABASE_PATH"],
+        lemma="pes",
+        translation="собака",
+        notes="animal",
+        metadata={},
+        due_at=due_at,
+    )
+    repository = CardRepository(app.config["DATABASE_PATH"])
+    forward_before = repository.get_review_state(created.id)
+
+    response = client.post(
+        f"/review/{created.id}/grade",
+        data={
+            "rating": "Good",
+            "deck": "1",
+            "direction": REVERSE_REVIEW_DIRECTION,
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/review?deck=1&direction=ru_to_cz")
+    assert repository.get_review_state(created.id) == forward_before
+    reverse_logs = repository.list_review_logs(created.id, direction=REVERSE_REVIEW_DIRECTION)
+    assert len(reverse_logs) == 1
+    assert reverse_logs[0].direction == REVERSE_REVIEW_DIRECTION
 
 
 def test_review_page_shows_undo_action_after_grading(client, app) -> None:
@@ -178,6 +234,31 @@ def test_invalid_undo_attempt_shows_contextual_feedback(client) -> None:
     assert response.status_code == 200
     page = response.get_data(as_text=True)
     assert "Последний ответ уже нельзя отменить." in page
+
+
+def test_reverse_undo_is_hidden_on_forward_page(client, app) -> None:
+    due_at = datetime(2026, 3, 14, 12, 0, tzinfo=UTC)
+    created = create_due_card(
+        app.config["DATABASE_PATH"],
+        lemma="hrad",
+        translation="замок",
+        notes="castle",
+        metadata={},
+        due_at=due_at,
+    )
+
+    client.post(
+        f"/review/{created.id}/grade",
+        data={
+            "rating": "Good",
+            "deck": "1",
+            "direction": REVERSE_REVIEW_DIRECTION,
+        },
+    )
+    response = client.get("/review?deck=1")
+
+    assert response.status_code == 200
+    assert "Отменить последний ответ" not in response.get_data(as_text=True)
 
 
 def test_invalid_grade_returns_400_and_does_not_create_review_log(client, app) -> None:

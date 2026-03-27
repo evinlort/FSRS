@@ -3,13 +3,12 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
-from czech_vocab.repositories.records import row_to_card, serialize_datetime, utc_now
-
-CARD_SELECT = """
-SELECT cards.*, deck_cards.deck_id AS deck_id
-FROM deck_cards
-JOIN cards ON cards.id = deck_cards.card_id
-"""
+from czech_vocab.repositories.records import (
+    DEFAULT_REVIEW_DIRECTION,
+    row_to_card,
+    serialize_datetime,
+    utc_now,
+)
 
 
 class DeckCardRepository:
@@ -48,6 +47,7 @@ class DeckCardRepository:
         self,
         *,
         deck_id: int,
+        direction: str = DEFAULT_REVIEW_DIRECTION,
         day_start: datetime,
         day_end: datetime,
     ) -> int:
@@ -61,6 +61,7 @@ class DeckCardRepository:
                     JOIN cards ON cards.id = deck_cards.card_id
                     JOIN review_logs ON review_logs.card_id = cards.id
                     WHERE deck_cards.deck_id = ?
+                      AND review_logs.direction = ?
                       AND review_logs.undone_at IS NULL
                     GROUP BY cards.id
                     HAVING MIN(review_logs.reviewed_at) >= ?
@@ -69,47 +70,80 @@ class DeckCardRepository:
                 """,
                 (
                     deck_id,
+                    direction,
                     serialize_datetime(day_start),
                     serialize_datetime(day_end),
                 ),
             ).fetchone()
         return row[0]
 
-    def query_due_learned_cards(self, *, deck_id: int, now: datetime) -> list:
+    def query_due_learned_cards(
+        self,
+        *,
+        deck_id: int,
+        now: datetime,
+        direction: str = DEFAULT_REVIEW_DIRECTION,
+    ) -> list:
         with self._connect() as connection:
             rows = connection.execute(
-                f"""
-                {CARD_SELECT}
+                """
+                SELECT
+                    cards.id,
+                    deck_cards.deck_id AS deck_id,
+                    cards.identity_key,
+                    cards.lemma,
+                    cards.translation,
+                    cards.notes,
+                    cards.metadata_json,
+                    states.fsrs_state_json AS fsrs_state_json,
+                    states.due_at AS due_at,
+                    states.last_review_at AS last_review_at,
+                    cards.created_at,
+                    cards.updated_at
+                FROM deck_cards
+                JOIN cards ON cards.id = deck_cards.card_id
+                JOIN card_review_states AS states
+                  ON states.card_id = cards.id
+                 AND states.direction = ?
                 WHERE deck_cards.deck_id = ?
-                  AND cards.due_at IS NOT NULL
-                  AND cards.due_at <= ?
+                  AND states.due_at IS NOT NULL
+                  AND states.due_at <= ?
                   AND EXISTS (
                       SELECT 1
                       FROM review_logs
                       WHERE review_logs.card_id = cards.id
+                        AND review_logs.direction = ?
                         AND review_logs.undone_at IS NULL
                   )
-                ORDER BY cards.due_at, cards.id
+                ORDER BY states.due_at, cards.id
                 """,
-                (deck_id, serialize_datetime(now)),
+                (
+                    direction,
+                    deck_id,
+                    serialize_datetime(now),
+                    direction,
+                ),
             ).fetchall()
         return [row_to_card(row) for row in rows]
 
-    def query_new_cards(self, *, deck_id: int) -> list:
+    def query_new_cards(self, *, deck_id: int, direction: str = DEFAULT_REVIEW_DIRECTION) -> list:
         with self._connect() as connection:
             rows = connection.execute(
-                f"""
-                {CARD_SELECT}
+                """
+                SELECT cards.*, deck_cards.deck_id AS deck_id
+                FROM deck_cards
+                JOIN cards ON cards.id = deck_cards.card_id
                 WHERE deck_cards.deck_id = ?
                   AND NOT EXISTS (
                       SELECT 1
                       FROM review_logs
                       WHERE review_logs.card_id = cards.id
+                        AND review_logs.direction = ?
                         AND review_logs.undone_at IS NULL
                   )
                 ORDER BY cards.id
                 """,
-                (deck_id,),
+                (deck_id, direction),
             ).fetchall()
         return [row_to_card(row) for row in rows]
 
