@@ -6,6 +6,7 @@ from czech_vocab.repositories import (
     AppSettingsRepository,
     CardCreate,
     CardRepository,
+    CardReviewStateRecord,
     DeckRepository,
     ReviewLogRecord,
     build_identity_key,
@@ -34,6 +35,7 @@ def test_app_startup_bootstraps_sqlite_schema(tmp_path: Path) -> None:
     assert {
         "cards",
         "review_logs",
+        "card_review_states",
         "decks",
         "app_settings",
         "import_previews",
@@ -134,11 +136,117 @@ def test_insert_review_log_and_read_it_back(tmp_path: Path) -> None:
     assert logs[0] == ReviewLogRecord(
         id=logs[0].id,
         card_id=created.id,
+        direction="cz_to_ru",
         rating="Good",
         reviewed_at=reviewed_at,
         review_duration_seconds=17,
         undone_at=None,
     )
+
+
+def test_get_review_state_defaults_to_forward_direction(tmp_path: Path) -> None:
+    repository = build_repository(tmp_path / "cards.sqlite3")
+    due_at = datetime(2026, 3, 14, 10, 0, tzinfo=UTC)
+    created = repository.create_card(
+        CardCreate(
+            identity_key="identity-forward",
+            lemma="kniha",
+            translation="книга",
+            notes="common noun",
+            metadata={"level": "A1"},
+            fsrs_state={"state": "learning"},
+            due_at=due_at,
+            last_review_at=None,
+        ),
+    )
+
+    assert repository.get_review_state(created.id) == CardReviewStateRecord(
+        card_id=created.id,
+        direction="cz_to_ru",
+        fsrs_state={"state": "learning"},
+        due_at=due_at,
+        last_review_at=None,
+        created_at=repository.get_review_state(created.id).created_at,
+        updated_at=repository.get_review_state(created.id).updated_at,
+    )
+
+
+def test_reverse_schedule_state_is_stored_without_overwriting_forward_state(tmp_path: Path) -> None:
+    repository = build_repository(tmp_path / "cards.sqlite3")
+    forward_due = datetime(2026, 3, 14, 10, 0, tzinfo=UTC)
+    reverse_due = datetime(2026, 3, 18, 12, 0, tzinfo=UTC)
+    created = repository.create_card(
+        CardCreate(
+            identity_key="identity-reverse",
+            lemma="pes",
+            translation="собака",
+            notes="animal",
+            metadata={},
+            fsrs_state={"state": "learning"},
+            due_at=forward_due,
+            last_review_at=None,
+        ),
+    )
+
+    repository.update_schedule_state(
+        card_id=created.id,
+        direction="ru_to_cz",
+        fsrs_state={"state": "review", "stability": 3.2},
+        due_at=reverse_due,
+        last_review_at=forward_due,
+    )
+
+    forward_state = repository.get_review_state(created.id, direction="cz_to_ru")
+    reverse_state = repository.get_review_state(created.id, direction="ru_to_cz")
+    stored = repository.get_card_by_id(created.id)
+
+    assert forward_state is not None
+    assert reverse_state is not None
+    assert forward_state.due_at == forward_due
+    assert reverse_state.due_at == reverse_due
+    assert reverse_state.last_review_at == forward_due
+    assert stored is not None
+    assert stored.due_at == forward_due
+
+
+def test_list_review_logs_can_filter_by_direction(tmp_path: Path) -> None:
+    repository = build_repository(tmp_path / "cards.sqlite3")
+    created = repository.create_card(
+        CardCreate(
+            identity_key="identity-logs",
+            lemma="most",
+            translation="мост",
+            notes="bridge",
+            metadata={},
+            fsrs_state={"state": "learning"},
+            due_at=datetime(2026, 3, 14, 10, 0, tzinfo=UTC),
+            last_review_at=None,
+        ),
+    )
+    reviewed_at = datetime(2026, 3, 14, 11, 0, tzinfo=UTC)
+
+    repository.insert_review_log(
+        card_id=created.id,
+        direction="cz_to_ru",
+        rating="Good",
+        reviewed_at=reviewed_at,
+        review_duration_seconds=17,
+    )
+    repository.insert_review_log(
+        card_id=created.id,
+        direction="ru_to_cz",
+        rating="Again",
+        reviewed_at=reviewed_at + timedelta(minutes=5),
+        review_duration_seconds=21,
+    )
+
+    assert [log.direction for log in repository.list_review_logs(created.id)] == [
+        "cz_to_ru",
+        "ru_to_cz",
+    ]
+    reverse_logs = repository.list_review_logs(created.id, direction="ru_to_cz")
+
+    assert [log.direction for log in reverse_logs] == ["ru_to_cz"]
 
 
 def test_query_due_cards_and_search_cards(tmp_path: Path) -> None:

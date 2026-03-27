@@ -16,12 +16,70 @@ def ensure_app_settings_schema(connection: sqlite3.Connection) -> None:
         )
 
 
-def ensure_review_logs_schema(connection: sqlite3.Connection) -> None:
+def ensure_review_logs_schema(
+    connection: sqlite3.Connection,
+    *,
+    default_direction: str,
+) -> None:
     if not table_exists(connection, "review_logs"):
         return
     columns = table_columns(connection, "review_logs")
+    if "direction" not in columns:
+        connection.execute("ALTER TABLE review_logs ADD COLUMN direction TEXT")
+    connection.execute(
+        """
+        UPDATE review_logs
+        SET direction = ?
+        WHERE direction IS NULL OR direction = ''
+        """,
+        (default_direction,),
+    )
     if "undone_at" not in columns:
         connection.execute("ALTER TABLE review_logs ADD COLUMN undone_at TEXT")
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_review_logs_card_direction
+        ON review_logs (card_id, direction, reviewed_at)
+        """
+    )
+
+
+def ensure_card_review_states_schema(
+    connection: sqlite3.Connection,
+    *,
+    default_direction: str,
+) -> None:
+    if not table_exists(connection, "cards") or not table_exists(connection, "card_review_states"):
+        return
+    connection.execute(
+        """
+        INSERT INTO card_review_states (
+            card_id,
+            direction,
+            fsrs_state_json,
+            due_at,
+            last_review_at,
+            created_at,
+            updated_at
+        )
+        SELECT
+            cards.id,
+            ?,
+            cards.fsrs_state_json,
+            cards.due_at,
+            cards.last_review_at,
+            cards.created_at,
+            cards.updated_at
+        FROM cards
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM card_review_states
+            WHERE card_review_states.card_id = cards.id
+              AND card_review_states.direction = ?
+        )
+        """,
+        (default_direction, default_direction),
+    )
 
 
 def ensure_cards_schema(
@@ -175,18 +233,22 @@ def conflicting_lemma_keys(legacy_rows) -> list[str]:
 def review_log_rows(connection: sqlite3.Connection) -> list[tuple]:
     if not table_exists(connection, "review_logs"):
         return []
+    columns = table_columns(connection, "review_logs")
+    direction_sql = "direction," if "direction" in columns else "? AS direction,"
     return connection.execute(
-        """
+        f"""
         SELECT
             id,
             card_id,
+            {direction_sql}
             rating,
             reviewed_at,
             review_duration_seconds,
             undone_at
         FROM review_logs
         ORDER BY id
-        """
+        """,
+        () if "direction" in columns else ("cz_to_ru",),
     ).fetchall()
 
 
@@ -199,11 +261,12 @@ def restore_review_logs(connection: sqlite3.Connection, review_logs) -> None:
         INSERT INTO review_logs (
             id,
             card_id,
+            direction,
             rating,
             reviewed_at,
             review_duration_seconds,
             undone_at
-        ) VALUES (?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         review_logs,
     )

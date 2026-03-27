@@ -6,8 +6,10 @@ from typing import Any
 
 from czech_vocab.repositories.deck_card_repository import DeckCardRepository
 from czech_vocab.repositories.records import (
+    DEFAULT_REVIEW_DIRECTION,
     CardCreate,
     CardRecord,
+    CardReviewStateRecord,
     ReviewLogRecord,
     build_identity_key,
     build_lemma_key,
@@ -15,6 +17,7 @@ from czech_vocab.repositories.records import (
     matches_query,
     parse_datetime,
     row_to_card,
+    row_to_review_state,
     serialize_datetime,
     utc_now,
 )
@@ -115,9 +118,43 @@ class CardRepository:
                     deck_id=card.deck_id,
                     connection=active_connection,
                 )
+            self._upsert_review_state(
+                card_id=cursor.lastrowid,
+                direction=DEFAULT_REVIEW_DIRECTION,
+                fsrs_state=card.fsrs_state,
+                due_at=card.due_at,
+                last_review_at=card.last_review_at,
+                created_at=timestamp,
+                connection=active_connection,
+            )
             created = self.get_card_by_id(cursor.lastrowid, connection=active_connection)
         assert created is not None
         return created
+
+    def get_review_state(
+        self,
+        card_id: int,
+        *,
+        direction: str = DEFAULT_REVIEW_DIRECTION,
+        connection: sqlite3.Connection | None = None,
+    ) -> CardReviewStateRecord | None:
+        with self._use_connection(connection) as active_connection:
+            row = active_connection.execute(
+                """
+                SELECT
+                    card_id,
+                    direction,
+                    fsrs_state_json,
+                    due_at,
+                    last_review_at,
+                    created_at,
+                    updated_at
+                FROM card_review_states
+                WHERE card_id = ? AND direction = ?
+                """,
+                (card_id, direction),
+            ).fetchone()
+        return row_to_review_state(row) if row else None
 
     def update_imported_content(
         self,
@@ -171,31 +208,42 @@ class CardRepository:
         self,
         *,
         card_id: int,
+        direction: str = DEFAULT_REVIEW_DIRECTION,
         fsrs_state: dict[str, Any],
         due_at: datetime | None,
         last_review_at: datetime | None,
         connection: sqlite3.Connection | None = None,
     ) -> None:
         with self._use_connection(connection) as active_connection:
-            active_connection.execute(
-                """
-                UPDATE cards
-                SET fsrs_state_json = ?, due_at = ?, last_review_at = ?, updated_at = ?
-                WHERE id = ?
-                """,
-                (
-                    dump_json(fsrs_state),
-                    serialize_datetime(due_at),
-                    serialize_datetime(last_review_at),
-                    serialize_datetime(utc_now()),
-                    card_id,
-                ),
+            self._upsert_review_state(
+                card_id=card_id,
+                direction=direction,
+                fsrs_state=fsrs_state,
+                due_at=due_at,
+                last_review_at=last_review_at,
+                connection=active_connection,
             )
+            if direction == DEFAULT_REVIEW_DIRECTION:
+                active_connection.execute(
+                    """
+                    UPDATE cards
+                    SET fsrs_state_json = ?, due_at = ?, last_review_at = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        dump_json(fsrs_state),
+                        serialize_datetime(due_at),
+                        serialize_datetime(last_review_at),
+                        serialize_datetime(utc_now()),
+                        card_id,
+                    ),
+                )
 
     def insert_review_log(
         self,
         *,
         card_id: int,
+        direction: str = DEFAULT_REVIEW_DIRECTION,
         rating: str,
         reviewed_at: datetime,
         review_duration_seconds: int | None,
@@ -206,14 +254,16 @@ class CardRepository:
                 """
                 INSERT INTO review_logs (
                     card_id,
+                    direction,
                     rating,
                     reviewed_at,
                     review_duration_seconds,
                     undone_at
-                ) VALUES (?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     card_id,
+                    direction,
                     rating,
                     serialize_datetime(reviewed_at),
                     review_duration_seconds,
@@ -223,22 +273,37 @@ class CardRepository:
         return ReviewLogRecord(
             id=cursor.lastrowid,
             card_id=card_id,
+            direction=direction,
             rating=rating,
             reviewed_at=reviewed_at.astimezone(UTC),
             review_duration_seconds=review_duration_seconds,
             undone_at=None,
         )
 
-    def list_review_logs(self, card_id: int) -> list[ReviewLogRecord]:
+    def list_review_logs(
+        self,
+        card_id: int,
+        *,
+        direction: str | None = None,
+    ) -> list[ReviewLogRecord]:
+        direction_sql = " AND direction = ?" if direction is not None else ""
+        params: tuple[Any, ...] = (card_id,) if direction is None else (card_id, direction)
         with self._connect() as connection:
             rows = connection.execute(
-                """
-                SELECT id, card_id, rating, reviewed_at, review_duration_seconds, undone_at
+                f"""
+                SELECT
+                    id,
+                    card_id,
+                    direction,
+                    rating,
+                    reviewed_at,
+                    review_duration_seconds,
+                    undone_at
                 FROM review_logs
-                WHERE card_id = ?
+                WHERE card_id = ?{direction_sql}
                 ORDER BY reviewed_at, id
                 """,
-                (card_id,),
+                params,
             ).fetchall()
         return [_row_to_review_log(row) for row in rows]
 
@@ -246,18 +311,28 @@ class CardRepository:
         self,
         *,
         card_id: int,
+        direction: str | None = None,
         connection: sqlite3.Connection | None = None,
     ) -> ReviewLogRecord | None:
+        direction_sql = " AND direction = ?" if direction is not None else ""
+        params: tuple[Any, ...] = (card_id,) if direction is None else (card_id, direction)
         with self._use_connection(connection) as active_connection:
             row = active_connection.execute(
-                """
-                SELECT id, card_id, rating, reviewed_at, review_duration_seconds, undone_at
+                f"""
+                SELECT
+                    id,
+                    card_id,
+                    direction,
+                    rating,
+                    reviewed_at,
+                    review_duration_seconds,
+                    undone_at
                 FROM review_logs
-                WHERE card_id = ? AND undone_at IS NULL
+                WHERE card_id = ? AND undone_at IS NULL{direction_sql}
                 ORDER BY reviewed_at DESC, id DESC
                 LIMIT 1
                 """,
-                (card_id,),
+                params,
             ).fetchone()
         return _row_to_review_log(row) if row else None
 
@@ -380,6 +455,46 @@ class CardRepository:
             row = active_connection.execute(query, params).fetchone()
         return row_to_card(row) if row else None
 
+    def _upsert_review_state(
+        self,
+        *,
+        card_id: int,
+        direction: str,
+        fsrs_state: dict[str, Any],
+        due_at: datetime | None,
+        last_review_at: datetime | None,
+        connection: sqlite3.Connection,
+        created_at: str | None = None,
+    ) -> None:
+        timestamp = serialize_datetime(utc_now())
+        connection.execute(
+            """
+            INSERT INTO card_review_states (
+                card_id,
+                direction,
+                fsrs_state_json,
+                due_at,
+                last_review_at,
+                created_at,
+                updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(card_id, direction) DO UPDATE SET
+                fsrs_state_json = excluded.fsrs_state_json,
+                due_at = excluded.due_at,
+                last_review_at = excluded.last_review_at,
+                updated_at = excluded.updated_at
+            """,
+            (
+                card_id,
+                direction,
+                dump_json(fsrs_state),
+                serialize_datetime(due_at),
+                serialize_datetime(last_review_at),
+                created_at or timestamp,
+                timestamp,
+            ),
+        )
+
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self._database_path)
         connection.row_factory = sqlite3.Row
@@ -399,6 +514,7 @@ def _row_to_review_log(row: sqlite3.Row) -> ReviewLogRecord:
     return ReviewLogRecord(
         id=row["id"],
         card_id=row["card_id"],
+        direction=row["direction"],
         rating=row["rating"],
         reviewed_at=parse_datetime(row["reviewed_at"]),
         review_duration_seconds=row["review_duration_seconds"],

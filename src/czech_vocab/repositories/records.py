@@ -5,6 +5,11 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from typing import Any
 
+FORWARD_REVIEW_DIRECTION = "cz_to_ru"
+REVERSE_REVIEW_DIRECTION = "ru_to_cz"
+DEFAULT_REVIEW_DIRECTION = FORWARD_REVIEW_DIRECTION
+ALLOWED_REVIEW_DIRECTIONS = {FORWARD_REVIEW_DIRECTION, REVERSE_REVIEW_DIRECTION}
+
 
 @dataclass(frozen=True)
 class CardCreate:
@@ -36,6 +41,17 @@ class CardRecord:
 
 
 @dataclass(frozen=True)
+class CardReviewStateRecord:
+    card_id: int
+    direction: str
+    fsrs_state: dict[str, Any]
+    due_at: datetime | None
+    last_review_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
 class DeckRecord:
     id: int
     name: str
@@ -58,6 +74,7 @@ class AppSettingsRecord:
 class ReviewLogRecord:
     id: int
     card_id: int
+    direction: str
     rating: str
     reviewed_at: datetime
     review_duration_seconds: int | None
@@ -148,6 +165,18 @@ def row_to_deck(row: sqlite3.Row) -> DeckRecord:
         name=row["name"],
         desired_retention=row["desired_retention"],
         daily_new_limit=row["daily_new_limit"],
+        created_at=parse_datetime(row["created_at"]),
+        updated_at=parse_datetime(row["updated_at"]),
+    )
+
+
+def row_to_review_state(row: sqlite3.Row) -> CardReviewStateRecord:
+    return CardReviewStateRecord(
+        card_id=row["card_id"],
+        direction=row["direction"],
+        fsrs_state=json.loads(row["fsrs_state_json"]),
+        due_at=parse_datetime(row["due_at"]),
+        last_review_at=parse_datetime(row["last_review_at"]),
         created_at=parse_datetime(row["created_at"]),
         updated_at=parse_datetime(row["updated_at"]),
     )

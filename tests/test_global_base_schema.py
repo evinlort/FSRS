@@ -21,6 +21,9 @@ def test_initialize_database_creates_global_base_tables_and_columns(tmp_path: Pa
         card_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(cards)").fetchall()
         }
+        review_log_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(review_logs)").fetchall()
+        }
         setting_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(app_settings)").fetchall()
         }
@@ -35,9 +38,10 @@ def test_initialize_database_creates_global_base_tables_and_columns(tmp_path: Pa
             """
         ).fetchone()
 
-    assert {"cards", "deck_cards", "deck_population_drafts"} <= tables
+    assert {"cards", "deck_cards", "deck_population_drafts", "card_review_states"} <= tables
     assert "deck_id" not in card_columns
     assert "lemma_key" in card_columns
+    assert "direction" in review_log_columns
     assert "default_target_deck_card_count" in setting_columns
     assert settings_row == (0.9, 20, 20)
 
@@ -54,26 +58,41 @@ def test_initialize_database_migrates_deck_owned_cards_to_linked_global_cards(
         card_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(cards)").fetchall()
         }
+        review_log_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(review_logs)").fetchall()
+        }
         cards = connection.execute(
             "SELECT id, lemma, translation, lemma_key FROM cards ORDER BY id"
+        ).fetchall()
+        review_states = connection.execute(
+            """
+            SELECT card_id, direction, due_at, last_review_at
+            FROM card_review_states
+            ORDER BY card_id, direction
+            """
         ).fetchall()
         links = connection.execute(
             "SELECT deck_id, card_id FROM deck_cards ORDER BY deck_id, card_id"
         ).fetchall()
         review_logs = connection.execute(
-            "SELECT card_id, rating FROM review_logs ORDER BY id"
+            "SELECT card_id, direction, rating FROM review_logs ORDER BY id"
         ).fetchall()
         target_count = connection.execute(
             "SELECT default_target_deck_card_count FROM app_settings WHERE id = 1"
         ).fetchone()
 
     assert "deck_id" not in card_columns
+    assert "direction" in review_log_columns
     assert cards == [
         (1, "kniha", "книга", "kniha"),
         (2, "vlak", "поезд", "vlak"),
     ]
+    assert review_states == [
+        (1, "cz_to_ru", None, None),
+        (2, "cz_to_ru", None, None),
+    ]
     assert links == [(1, 1), (2, 2)]
-    assert review_logs == [(1, "Good"), (2, "Again")]
+    assert review_logs == [(1, "cz_to_ru", "Good"), (2, "cz_to_ru", "Again")]
     assert target_count == (20,)
 
 

@@ -1,9 +1,10 @@
 import sqlite3
 from pathlib import Path
 
-from czech_vocab.repositories.records import serialize_datetime, utc_now
+from czech_vocab.repositories.records import DEFAULT_REVIEW_DIRECTION, serialize_datetime, utc_now
 from czech_vocab.repositories.schema_migrations import (
     ensure_app_settings_schema,
+    ensure_card_review_states_schema,
     ensure_cards_schema,
     ensure_review_logs_schema,
 )
@@ -37,14 +38,13 @@ CREATE TABLE IF NOT EXISTS app_settings (
 CREATE TABLE IF NOT EXISTS review_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     card_id INTEGER NOT NULL,
+    direction TEXT NOT NULL DEFAULT 'cz_to_ru',
     rating TEXT NOT NULL,
     reviewed_at TEXT NOT NULL,
     review_duration_seconds INTEGER,
     undone_at TEXT,
     FOREIGN KEY (card_id) REFERENCES cards (id) ON DELETE CASCADE
 );
-
-CREATE INDEX IF NOT EXISTS idx_review_logs_card_id ON review_logs (card_id, reviewed_at);
 
 CREATE TABLE IF NOT EXISTS import_previews (
     token TEXT PRIMARY KEY,
@@ -105,6 +105,23 @@ CREATE TABLE IF NOT EXISTS deck_population_drafts (
 );
 """
 
+REVIEW_STATE_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS card_review_states (
+    card_id INTEGER NOT NULL,
+    direction TEXT NOT NULL,
+    fsrs_state_json TEXT NOT NULL,
+    due_at TEXT,
+    last_review_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (card_id, direction),
+    FOREIGN KEY (card_id) REFERENCES cards (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_card_review_states_direction_due_at
+ON card_review_states (direction, due_at, card_id);
+"""
+
 
 def initialize_database(database_path: Path) -> None:
     database_path.parent.mkdir(parents=True, exist_ok=True)
@@ -114,7 +131,7 @@ def initialize_database(database_path: Path) -> None:
         connection.executescript(BASE_SCHEMA_SQL)
         ensure_app_settings_schema(connection)
         _seed_defaults(connection)
-        ensure_review_logs_schema(connection)
+        ensure_review_logs_schema(connection, default_direction=DEFAULT_REVIEW_DIRECTION)
         ensure_cards_schema(
             connection,
             cards_schema_sql=CARDS_SCHEMA_SQL,
@@ -122,6 +139,11 @@ def initialize_database(database_path: Path) -> None:
             default_deck_name=DEFAULT_DECK_NAME,
         )
         connection.executescript(LINK_SCHEMA_SQL)
+        connection.executescript(REVIEW_STATE_SCHEMA_SQL)
+        ensure_card_review_states_schema(
+            connection,
+            default_direction=DEFAULT_REVIEW_DIRECTION,
+        )
         connection.execute("PRAGMA foreign_keys = ON")
 
 
