@@ -3,6 +3,7 @@ from pathlib import Path
 
 from czech_vocab.domain import FsrsScheduler
 from czech_vocab.repositories import (
+    REVERSE_REVIEW_DIRECTION,
     CardCreate,
     CardRepository,
     build_identity_key,
@@ -71,6 +72,43 @@ def test_stats_service_uses_app_default_retention_for_all_decks_and_ignores_undo
     assert stats.success_rate == "Нет данных"
     assert stats.fail_rate == "Нет данных"
     assert stats.desired_retention_text == "0.90"
+    assert stats.summary_rows == []
+
+
+def test_stats_service_ignores_reverse_direction_activity(tmp_path: Path) -> None:
+    database_path = tmp_path / "stats.sqlite3"
+    initialize_database(database_path)
+    now = datetime(2026, 3, 14, 12, 0, tzinfo=UTC)
+    card = create_stats_card(
+        database_path,
+        lemma="most",
+        translation="мост",
+        due_at=now + timedelta(days=3),
+        learned=False,
+    )
+    repository = CardRepository(database_path)
+    scheduler = FsrsScheduler(enable_fuzzing=False)
+    reverse_state = scheduler.create_default_state(card_id=card.id, now=now - timedelta(days=1))
+    repository.update_schedule_state(
+        card_id=card.id,
+        direction=REVERSE_REVIEW_DIRECTION,
+        fsrs_state=reverse_state,
+        due_at=now - timedelta(hours=1),
+        last_review_at=now - timedelta(days=1),
+    )
+    repository.insert_review_log(
+        card_id=card.id,
+        direction=REVERSE_REVIEW_DIRECTION,
+        rating="Good",
+        reviewed_at=now - timedelta(hours=2),
+        review_duration_seconds=12,
+    )
+
+    stats = StatsService(database_path).get_stats(now=now, deck="all")
+
+    assert stats.due_today == 0
+    assert stats.reviewed_today == 0
+    assert stats.success_rate == "Нет данных"
     assert stats.summary_rows == []
 
 

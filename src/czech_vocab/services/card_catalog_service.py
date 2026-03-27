@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from math import ceil
 from pathlib import Path
 
-from czech_vocab.repositories import CardRepository
+from czech_vocab.repositories import FORWARD_REVIEW_DIRECTION, CardRepository
 from czech_vocab.services.deck_settings_service import DeckSettingsService
 
 PAGE_SIZE = 50
@@ -115,21 +115,38 @@ class CardCatalogService:
             rows = connection.execute(
                 """
                 SELECT
-                    cards.*,
+                    cards.id,
+                    cards.identity_key,
+                    cards.lemma,
+                    cards.translation,
+                    cards.notes,
+                    cards.metadata_json,
+                    forward_states.due_at AS due_at,
+                    forward_states.last_review_at AS last_review_at,
+                    cards.created_at,
+                    cards.updated_at,
                     deck_cards.deck_id AS deck_id,
                     COALESCE(decks.name, ?) AS deck_name,
                     EXISTS (
                         SELECT 1
                         FROM review_logs
                         WHERE review_logs.card_id = cards.id
+                          AND review_logs.direction = ?
                           AND review_logs.undone_at IS NULL
                     ) AS is_learned
                 FROM cards
                 LEFT JOIN deck_cards ON deck_cards.card_id = cards.id
                 LEFT JOIN decks ON decks.id = deck_cards.deck_id
+                LEFT JOIN card_review_states AS forward_states
+                  ON forward_states.card_id = cards.id
+                 AND forward_states.direction = ?
                 ORDER BY cards.lemma, cards.id
                 """,
-                (UNASSIGNED_DECK_LABEL,),
+                (
+                    UNASSIGNED_DECK_LABEL,
+                    FORWARD_REVIEW_DIRECTION,
+                    FORWARD_REVIEW_DIRECTION,
+                ),
             ).fetchall()
         return [dict(row) for row in rows]
 

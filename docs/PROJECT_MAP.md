@@ -13,6 +13,7 @@
   - CSV import by header names, with preview-before-confirm
   - multi-deck card storage
   - deck-scoped review with FSRS scheduler grades `Again`, `Hard`, `Good`, `Easy`
+  - two review directions: `Czech -> Russian` and `Russian -> Czech`
   - undo for the last review answer
   - cards list/search/filter/edit
   - 30-day stats page
@@ -22,6 +23,7 @@
   - SQLite schema bootstrap and seed defaults
   - FSRS adapter around the `fsrs` package
   - deck-aware review queue rules with randomized order inside due/new groups
+  - independent FSRS scheduling and review logs per review direction
   - import preview persistence into a global unassigned word base
   - combined CSV-to-deck preview and creation flow that updates existing lemma matches and assigns accepted rows directly to a new deck
   - runtime deck membership resolved through `deck_cards` joins rather than `cards.deck_id`
@@ -89,8 +91,8 @@
   - handler: `home()` in [`routes.py`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/routes.py)
   - template: [`home.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/home.html)
   - service: [`DashboardService`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/dashboard_service.py)
-  - DB access: `cards`, `decks`, `review_logs`
-  - inputs: none
+  - DB access: `cards`, `card_review_states`, `decks`, `review_logs`
+  - inputs: optional query param `direction`
   - notes: includes a dedicated shortcut to the evidence-based memory tips guide at `/memory-tips`
 
 - `/favicon.ico`
@@ -181,23 +183,23 @@
   - handler: `review_page()`
   - template: [`review.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/review.html)
   - services: [`StudyService`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/study_service.py), `DeckSettingsService`
-  - inputs: query param `deck`
-  - DB access: `decks`, `cards`, `deck_cards`, `review_logs`
+  - inputs: query params `deck`, `direction`
+  - DB access: `decks`, `cards`, `card_review_states`, `deck_cards`, `review_logs`
 
 - `/review/<card_id>/grade`
   - methods: `POST`
   - handler: `submit_review()`
   - service: `StudyService`
-  - inputs: form `rating`, `deck`
-  - DB access: `cards`, `deck_cards`, `review_logs`
+  - inputs: form `rating`, `deck`, `direction`
+  - DB access: `cards`, `card_review_states`, `deck_cards`, `review_logs`
   - side effect: writes session key `review_undo`
 
 - `/review/undo`
   - methods: `POST`
   - handler: `undo_review()`
   - service: `StudyService`
-  - inputs: form `deck`
-  - DB access: `cards`, `review_logs`
+  - inputs: form `deck`, `direction`
+  - DB access: `cards`, `card_review_states`, `review_logs`
   - side effect: reads/clears session key `review_undo`
 
 - `/cards`
@@ -206,7 +208,8 @@
   - template: [`cards.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/cards.html)
   - service: [`CardCatalogService`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/card_catalog_service.py)
   - inputs: `deck`, `status`, `search_in`, `q`, `page`
-  - DB access: `cards`, `deck_cards`, `decks`, `review_logs`
+  - DB access: `cards`, `card_review_states`, `deck_cards`, `decks`, `review_logs`
+  - notes: status/due calculations are forward-direction only (`cz_to_ru`)
 
 - `/cards/<card_id>/edit`
   - methods: `GET`, `POST`
@@ -222,7 +225,8 @@
   - template: [`stats.html`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/web/templates/stats.html)
   - service: [`StatsService`](/home/egrebnev/Dev/ai/FSRS/src/czech_vocab/services/stats_service.py)
   - inputs: query param `deck`
-  - DB access: `cards`, `deck_cards`, `decks`, `review_logs`, `app_settings`
+  - DB access: `cards`, `card_review_states`, `deck_cards`, `decks`, `review_logs`, `app_settings`
+  - notes: metrics are forward-direction only (`cz_to_ru`)
 
 - `/settings`
   - methods: `GET`, `POST`
@@ -247,10 +251,10 @@
   - read by: settings and deck creation flows
 
 - `cards`
-  - role: persistent global card content + scheduling state
-  - important fields: `lemma_key`, `identity_key`, `lemma`, `translation`, `notes`, `metadata_json`, `fsrs_state_json`, `due_at`, `last_review_at`
+  - role: persistent global card content
+  - important fields: `lemma_key`, `identity_key`, `lemma`, `translation`, `notes`, `metadata_json`
   - uniqueness: `lemma_key`
-  - written by: global-base import, review scheduling updates, card edit
+  - written by: global-base import, card edit, and forward-review state mirroring for compatibility
   - read by: review queue, dashboard, cards list, stats
 
 - `deck_cards`
@@ -258,6 +262,21 @@
   - important fields: `card_id`, `deck_id`, `created_at`
   - relations: `card_id -> cards.id`, `deck_id -> decks.id`
   - uniqueness: `card_id` is unique so a card can belong to at most one active deck
+
+- `card_review_states`
+  - role: per-card FSRS state split by review direction
+  - important fields: `card_id`, `direction`, `fsrs_state_json`, `due_at`, `last_review_at`
+  - relations: `card_id -> cards.id`
+  - uniqueness: `(card_id, direction)` so each card has at most one state row per direction
+  - written by: review scheduling updates and schema backfill
+  - read by: review queue, dashboard, cards list, and stats
+
+- `review_logs`
+  - role: immutable review history with undo markers
+  - important fields: `card_id`, `direction`, `rating`, `reviewed_at`, `review_duration_seconds`, `undone_at`
+  - relations: `card_id -> cards.id`
+  - written by: `StudyService`
+  - read by: review undo, dashboard recent activity, cards learned/new status, and stats
   - written by: schema migration, explicit deck assignment, and card edit reassignment
   - read by: review queue, dashboard, cards list, stats, and duplicate lookup by deck
 

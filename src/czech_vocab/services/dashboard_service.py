@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from czech_vocab.repositories import CardRepository, DeckRepository
+from czech_vocab.repositories import DEFAULT_REVIEW_DIRECTION, CardRepository, DeckRepository
 from czech_vocab.repositories.records import serialize_datetime
 
 
@@ -36,17 +36,27 @@ class DashboardService:
         self._repository = CardRepository(database_path)
         self._deck_repository = DeckRepository(database_path)
 
-    def get_dashboard_data(self, *, now: datetime) -> DashboardData:
-        deck_summaries = self._load_deck_summaries(now)
+    def get_dashboard_data(
+        self,
+        *,
+        now: datetime,
+        direction: str = DEFAULT_REVIEW_DIRECTION,
+    ) -> DashboardData:
+        deck_summaries = self._load_deck_summaries(now, direction=direction)
         return DashboardData(
             total_cards=sum(item.total_cards for item in deck_summaries),
             due_cards=sum(item.due_cards for item in deck_summaries),
             selected_deck_id=_pick_selected_deck(deck_summaries),
             deck_summaries=deck_summaries,
-            recent_reviews=self._load_recent_reviews(),
+            recent_reviews=self._load_recent_reviews(direction=direction),
         )
 
-    def _load_deck_summaries(self, now: datetime) -> list[DashboardDeckSummary]:
+    def _load_deck_summaries(
+        self,
+        now: datetime,
+        *,
+        direction: str,
+    ) -> list[DashboardDeckSummary]:
         decks = self._deck_repository.list_decks()
         with self._repository.connect() as connection:
             rows = connection.execute(
@@ -58,7 +68,7 @@ class DashboardService:
                     COALESCE(
                         SUM(
                             CASE
-                                WHEN cards.due_at IS NOT NULL AND cards.due_at <= ? THEN 1
+                                WHEN states.due_at IS NOT NULL AND states.due_at <= ? THEN 1
                                 ELSE 0
                             END
                         ),
@@ -67,10 +77,13 @@ class DashboardService:
                 FROM decks
                 LEFT JOIN deck_cards ON deck_cards.deck_id = decks.id
                 LEFT JOIN cards ON cards.id = deck_cards.card_id
+                LEFT JOIN card_review_states AS states
+                  ON states.card_id = cards.id
+                 AND states.direction = ?
                 GROUP BY decks.id, decks.name
                 ORDER BY decks.id
                 """,
-                (serialize_datetime(now),),
+                (serialize_datetime(now), direction),
             ).fetchall()
         totals = {row["deck_id"]: row for row in rows}
         return [
@@ -83,7 +96,7 @@ class DashboardService:
             for deck in decks
         ]
 
-    def _load_recent_reviews(self) -> list[DashboardRecentReview]:
+    def _load_recent_reviews(self, *, direction: str) -> list[DashboardRecentReview]:
         with self._repository.connect() as connection:
             rows = connection.execute(
                 """
@@ -96,10 +109,12 @@ class DashboardService:
                 JOIN cards ON cards.id = review_logs.card_id
                 JOIN deck_cards ON deck_cards.card_id = cards.id
                 JOIN decks ON decks.id = deck_cards.deck_id
-                WHERE review_logs.undone_at IS NULL
+                WHERE review_logs.direction = ?
+                  AND review_logs.undone_at IS NULL
                 ORDER BY review_logs.reviewed_at DESC, review_logs.id DESC
                 LIMIT 5
-                """
+                """,
+                (direction,),
             ).fetchall()
         return [
             DashboardRecentReview(

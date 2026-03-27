@@ -2,7 +2,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from czech_vocab.repositories import AppSettingsRepository, CardRepository, DeckRepository
+from czech_vocab.repositories import (
+    FORWARD_REVIEW_DIRECTION,
+    AppSettingsRepository,
+    CardRepository,
+    DeckRepository,
+)
 
 SUCCESS_RATINGS = {"Good", "Easy"}
 FAIL_RATINGS = {"Again", "Hard"}
@@ -108,10 +113,13 @@ def _count_due_today(connection, selected_deck: str, day_end: datetime) -> int:
         SELECT COUNT(*)
         FROM cards
         JOIN deck_cards ON deck_cards.card_id = cards.id
-        WHERE cards.due_at IS NOT NULL
-          AND cards.due_at < ?{where_sql}
+        JOIN card_review_states AS states
+          ON states.card_id = cards.id
+         AND states.direction = ?
+        WHERE states.due_at IS NOT NULL
+          AND states.due_at < ?{where_sql}
         """,
-        (day_end.isoformat(), *params),
+        (FORWARD_REVIEW_DIRECTION, day_end.isoformat(), *params),
     ).fetchone()
     return row[0]
 
@@ -124,11 +132,12 @@ def _count_reviews(connection, selected_deck: str, day_start: datetime, day_end:
         FROM review_logs
         JOIN cards ON cards.id = review_logs.card_id
         JOIN deck_cards ON deck_cards.card_id = cards.id
-        WHERE review_logs.undone_at IS NULL
+        WHERE review_logs.direction = ?
+          AND review_logs.undone_at IS NULL
           AND review_logs.reviewed_at >= ?
           AND review_logs.reviewed_at < ?{where_sql}
         """,
-        (day_start.isoformat(), day_end.isoformat(), *params),
+        (FORWARD_REVIEW_DIRECTION, day_start.isoformat(), day_end.isoformat(), *params),
     ).fetchone()
     return row[0]
 
@@ -146,12 +155,18 @@ def _count_outcomes(
         FROM review_logs
         JOIN cards ON cards.id = review_logs.card_id
         JOIN deck_cards ON deck_cards.card_id = cards.id
-        WHERE review_logs.undone_at IS NULL
+        WHERE review_logs.direction = ?
+          AND review_logs.undone_at IS NULL
           AND review_logs.reviewed_at >= ?
           AND review_logs.reviewed_at < ?{where_sql}
         GROUP BY review_logs.rating
         """,
-        (horizon_start.isoformat(), day_end.isoformat(), *params),
+        (
+            FORWARD_REVIEW_DIRECTION,
+            horizon_start.isoformat(),
+            day_end.isoformat(),
+            *params,
+        ),
     ).fetchall()
     success = sum(row["total"] for row in rows if row["rating"] in SUCCESS_RATINGS)
     fail = sum(row["total"] for row in rows if row["rating"] in FAIL_RATINGS)
@@ -162,13 +177,16 @@ def _average_interval_text(connection, selected_deck: str) -> str:
     where_sql, params = _deck_filter_clause(selected_deck)
     rows = connection.execute(
         f"""
-        SELECT due_at, last_review_at
+        SELECT states.due_at, states.last_review_at
         FROM cards
         JOIN deck_cards ON deck_cards.card_id = cards.id
-        WHERE due_at IS NOT NULL
-          AND last_review_at IS NOT NULL{where_sql}
+        JOIN card_review_states AS states
+          ON states.card_id = cards.id
+         AND states.direction = ?
+        WHERE states.due_at IS NOT NULL
+          AND states.last_review_at IS NOT NULL{where_sql}
         """,
-        params,
+        (FORWARD_REVIEW_DIRECTION, *params),
     ).fetchall()
     intervals = []
     for row in rows:
@@ -202,14 +220,20 @@ def _load_summary_rows(
         FROM review_logs
         JOIN cards ON cards.id = review_logs.card_id
         JOIN deck_cards ON deck_cards.card_id = cards.id
-        WHERE review_logs.undone_at IS NULL
+        WHERE review_logs.direction = ?
+          AND review_logs.undone_at IS NULL
           AND review_logs.reviewed_at >= ?
           AND review_logs.reviewed_at < ?{where_sql}
         GROUP BY review_date
         ORDER BY review_date DESC
         LIMIT 10
         """,
-        (horizon_start.isoformat(), day_end.isoformat(), *params),
+        (
+            FORWARD_REVIEW_DIRECTION,
+            horizon_start.isoformat(),
+            day_end.isoformat(),
+            *params,
+        ),
     ).fetchall()
     return [
         StatsSummaryRow(

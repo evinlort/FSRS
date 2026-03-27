@@ -52,7 +52,10 @@ main_bp = Blueprint("main", __name__)
 def home() -> str:
     selected_review_direction = parse_review_direction(request.args.get("direction"))
     service = DashboardService(current_app.config["DATABASE_PATH"])
-    dashboard = service.get_dashboard_data(now=datetime.now(UTC))
+    dashboard = service.get_dashboard_data(
+        now=datetime.now(UTC),
+        direction=selected_review_direction,
+    )
     return render_template(
         "home.html",
         dashboard=dashboard,

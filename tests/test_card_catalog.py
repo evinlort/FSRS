@@ -1,7 +1,12 @@
 from datetime import UTC, datetime, timedelta
 
 from czech_vocab.domain import FsrsScheduler
-from czech_vocab.repositories import CardCreate, CardRepository, build_identity_key
+from czech_vocab.repositories import (
+    REVERSE_REVIEW_DIRECTION,
+    CardCreate,
+    CardRepository,
+    build_identity_key,
+)
 from czech_vocab.services import DeckSettingsService
 
 
@@ -31,7 +36,7 @@ def test_cards_page_lists_cards_for_selected_deck_ordered_by_lemma(client, app) 
 
 
 def test_cards_page_combines_deck_status_and_search_scope_filters(client, app) -> None:
-    now = datetime(2026, 3, 14, 12, 0, tzinfo=UTC)
+    now = datetime.now(UTC).replace(microsecond=0)
     deck_service = DeckSettingsService(app.config["DATABASE_PATH"])
     travel_deck = deck_service.create_deck("Путешествия")
     create_catalog_card(
@@ -140,6 +145,41 @@ def test_cards_page_distinguishes_empty_catalog_from_no_matches(client, app) -> 
     assert 'href="/cards?deck=1&amp;status=all&amp;search_in=czech"' in no_match_page
 
 
+def test_cards_page_ignores_reverse_direction_progress_for_status_filters(client, app) -> None:
+    now = datetime(2026, 3, 14, 12, 0, tzinfo=UTC)
+    card = create_catalog_card(
+        app.config["DATABASE_PATH"],
+        "most",
+        "мост",
+        "bridge",
+        now + timedelta(days=2),
+        learned=False,
+    )
+    repository = CardRepository(app.config["DATABASE_PATH"])
+    scheduler = FsrsScheduler(enable_fuzzing=False)
+    reverse_state = scheduler.create_default_state(card_id=card.id, now=now - timedelta(days=1))
+    repository.update_schedule_state(
+        card_id=card.id,
+        direction=REVERSE_REVIEW_DIRECTION,
+        fsrs_state=reverse_state,
+        due_at=now - timedelta(minutes=10),
+        last_review_at=now - timedelta(days=1),
+    )
+    repository.insert_review_log(
+        card_id=card.id,
+        direction=REVERSE_REVIEW_DIRECTION,
+        rating="Good",
+        reviewed_at=now - timedelta(hours=1),
+        review_duration_seconds=12,
+    )
+
+    due_page = client.get("/cards?status=due").get_data(as_text=True)
+    new_page = client.get("/cards?status=new").get_data(as_text=True)
+
+    assert "most" not in due_page
+    assert "most" in new_page
+
+
 def create_catalog_card(
     database_path,
     lemma: str,
@@ -187,3 +227,6 @@ def create_catalog_card(
             due_at=due_at,
             last_review_at=due_at - timedelta(days=1),
         )
+    updated = repository.get_card_by_id(created.id)
+    assert updated is not None
+    return updated

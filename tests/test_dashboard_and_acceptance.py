@@ -3,7 +3,12 @@ from datetime import UTC, datetime, timedelta
 from io import BytesIO
 
 from czech_vocab.domain import FsrsScheduler
-from czech_vocab.repositories import CardCreate, CardRepository, build_identity_key
+from czech_vocab.repositories import (
+    REVERSE_REVIEW_DIRECTION,
+    CardCreate,
+    CardRepository,
+    build_identity_key,
+)
 from czech_vocab.services import DeckSettingsService
 
 
@@ -66,6 +71,62 @@ def test_home_page_points_to_import_when_no_cards_exist(client) -> None:
     assert "Памятка по запоминанию" in page
     assert "Открыть памятку" in page
     assert page.count('href="/memory-tips"') >= 2
+
+
+def test_home_page_filters_due_counts_and_recent_reviews_by_direction(client, app) -> None:
+    database_path = app.config["DATABASE_PATH"]
+    now = datetime(2026, 3, 14, 12, 0, tzinfo=UTC)
+    create_dashboard_card(
+        database_path,
+        lemma="kniha",
+        translation="книга",
+        due_at=now - timedelta(hours=1),
+        learned=True,
+    )
+    reverse_card = create_dashboard_card(
+        database_path,
+        lemma="vlak",
+        translation="поезд",
+        due_at=now + timedelta(days=2),
+        learned=False,
+    )
+    scheduler = FsrsScheduler(enable_fuzzing=False)
+    repository = CardRepository(database_path)
+    reverse_state = scheduler.create_default_state(
+        card_id=reverse_card.id,
+        now=now - timedelta(days=1),
+    )
+    reverse_due = scheduler.deserialize_card(reverse_state).due
+    repository.update_schedule_state(
+        card_id=reverse_card.id,
+        direction=REVERSE_REVIEW_DIRECTION,
+        fsrs_state=reverse_state,
+        due_at=reverse_due,
+        last_review_at=now - timedelta(days=1),
+    )
+    repository.insert_review_log(
+        card_id=reverse_card.id,
+        direction=REVERSE_REVIEW_DIRECTION,
+        rating="Again",
+        reviewed_at=now - timedelta(minutes=20),
+        review_duration_seconds=12,
+    )
+    repository.update_schedule_state(
+        card_id=reverse_card.id,
+        direction=REVERSE_REVIEW_DIRECTION,
+        fsrs_state=reverse_state,
+        due_at=now - timedelta(minutes=5),
+        last_review_at=now - timedelta(minutes=20),
+    )
+
+    response = client.get("/?direction=ru_to_cz")
+
+    assert response.status_code == 200
+    page = response.get_data(as_text=True)
+    assert 'option value="ru_to_cz" selected' in page
+    assert "К повторению сегодня: 1" in page
+    assert "Again" in page
+    assert "vlak" in page
 
 
 def test_acceptance_flow_covers_import_review_and_catalog(client, app) -> None:
